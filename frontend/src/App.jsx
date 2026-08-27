@@ -8,36 +8,17 @@ import {
 import "./App.css";
 import "./styles.css";
 
-
-/* =========================
-   AUTH
-========================= */
-
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 
-
-/* =========================
-   COMPONENTS
-========================= */
-
 import ProtectedRoute from "../components/ProtectedRoute";
 
-
-/* =========================
-   CUSTOMER
-========================= */
-
+import CustomerHome from "../customer/CustomerHome";
 import CustomerDashboard from "../customer/CustomerDashboard";
 import PostJob from "../customer/PostJob";
 import NyJobs from "../customer/NyJobs";
 import JobDetails from "../customer/JobDetails";
 import Payment from "../customer/Payment";
-
-
-/* =========================
-   WORKER
-========================= */
 
 import WorkerDashboard from "../worker/WorkerDashboard";
 import AvailableJobs from "../worker/AvailableJobs";
@@ -47,10 +28,8 @@ import WorkerProfile from "../worker/WorkerProfile";
 
 
 function App() {
-
     return (
         <BrowserRouter>
-
             <Routes>
 
                 {/* =========================
@@ -85,54 +64,56 @@ function App() {
                 <Route
                     element={
                         <ProtectedRoute
-                            role="customer"
+                            allowedRole="customer"
                         />
                     }
                 >
 
+                    {/* CUSTOMER ROOT */}
                     <Route
                         path="/customer"
                         element={
                             <Navigate
-                                to="/customer/dashboard"
+                                to="/customer/home"
                                 replace
                             />
                         }
                     />
 
+                    {/* CUSTOMER HOME */}
+                    <Route
+                        path="/customer/home"
+                        element={<CustomerHome />}
+                    />
+
+                    {/* CUSTOMER DASHBOARD */}
                     <Route
                         path="/customer/dashboard"
-                        element={
-                            <CustomerDashboard />
-                        }
+                        element={<CustomerDashboard />}
                     />
 
+                    {/* POST JOB */}
                     <Route
                         path="/customer/post-job"
-                        element={
-                            <PostJob />
-                        }
+                        element={<PostJob />}
                     />
 
+                    {/* MY JOBS */}
                     <Route
                         path="/customer/my-jobs"
-                        element={
-                            <NyJobs />
-                        }
+                        element={<NyJobs />}
                     />
 
+                    {/* JOB DETAILS */}
                     <Route
                         path="/customer/job/:jobId"
-                        element={
-                            <JobDetails />
-                        }
+                        element={<JobDetails />}
                     />
 
+                    {/* PAYMENT */}
                     <Route
                         path="/customer/payment/:jobId"
-                        element={
-                            <Payment />
-                        }
+                        element={<Payment />}
                     />
 
                 </Route>
@@ -145,7 +126,7 @@ function App() {
                 <Route
                     element={
                         <ProtectedRoute
-                            role="worker"
+                            allowedRole="worker"
                         />
                     }
                 >
@@ -162,51 +143,37 @@ function App() {
 
                     <Route
                         path="/worker/dashboard"
-                        element={
-                            <WorkerDashboard />
-                        }
+                        element={<WorkerDashboard />}
                     />
 
                     <Route
                         path="/worker/available-jobs"
-                        element={
-                            <AvailableJobs />
-                        }
+                        element={<AvailableJobs />}
                     />
 
                     <Route
                         path="/worker/jobs"
-                        element={
-                            <AvailableJobs />
-                        }
+                        element={<AvailableJobs />}
                     />
 
                     <Route
                         path="/worker/job/:jobId"
-                        element={
-                            <WorkerJobDetails />
-                        }
+                        element={<WorkerJobDetails />}
                     />
 
                     <Route
                         path="/worker/jobs/:jobId"
-                        element={
-                            <WorkerJobDetails />
-                        }
+                        element={<WorkerJobDetails />}
                     />
 
                     <Route
                         path="/worker/notifications"
-                        element={
-                            <WorkerNotifications />
-                        }
+                        element={<WorkerNotifications />}
                     />
 
                     <Route
                         path="/worker/profile"
-                        element={
-                            <WorkerProfile />
-                        }
+                        element={<WorkerProfile />}
                     />
 
                 </Route>
@@ -227,10 +194,8 @@ function App() {
                 />
 
             </Routes>
-
         </BrowserRouter>
     );
 }
-
 
 export default App;

@@ -1,28 +1,14 @@
+import React from "react";
 import { Navigate, Outlet } from "react-router-dom";
 
-import { useAuth } from "../context/AuthContext";
+function ProtectedRoute({ allowedRole }) {
+    const token =
+        localStorage.getItem("nexserve_token");
 
+    const userData =
+        localStorage.getItem("nexserve_user");
 
-function ProtectedRoute({ role }) {
-
-    const {
-        user,
-        loading,
-        isAuthenticated
-    } = useAuth();
-
-
-    if (loading) {
-        return (
-            <div className="loading">
-                <div className="spinner" />
-                <p>Loading...</p>
-            </div>
-        );
-    }
-
-
-    if (!isAuthenticated) {
+    if (!token || !userData) {
         return (
             <Navigate
                 to="/login"
@@ -31,12 +17,31 @@ function ProtectedRoute({ role }) {
         );
     }
 
+    let user;
+
+    try {
+        user = JSON.parse(userData);
+    } catch {
+        localStorage.removeItem(
+            "nexserve_token"
+        );
+
+        localStorage.removeItem(
+            "nexserve_user"
+        );
+
+        return (
+            <Navigate
+                to="/login"
+                replace
+            />
+        );
+    }
 
     if (
-        role &&
-        user?.role !== role
+        allowedRole &&
+        user?.role !== allowedRole
     ) {
-
         if (user?.role === "worker") {
             return (
                 <Navigate
@@ -46,18 +51,15 @@ function ProtectedRoute({ role }) {
             );
         }
 
-
         return (
             <Navigate
-                to="/customer/dashboard"
+                to="/customer/home"
                 replace
             />
         );
     }
 
-
     return <Outlet />;
 }
-
 
 export default ProtectedRoute;

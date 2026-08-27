@@ -52,7 +52,7 @@ function Login() {
                     replace: true
                 });
             } else {
-                navigate("/customer", {
+                navigate("/customer/home", {
                     replace: true
                 });
             }
