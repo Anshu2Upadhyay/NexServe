@@ -1,0 +1,39 @@
+description,category,requiredSkill,difficulty,minPrice,maxPrice
+"Bathroom pipe is leaking and needs repair","Plumbing","Plumber","Easy",200,400
+"Kitchen water pipe is broken","Plumbing","Plumber","Medium",300,600
+"Water tap is leaking","Plumbing","Plumber","Easy",150,300
+"Bathroom water tap needs replacement","Plumbing","Plumber","Easy",200,400
+"Main water pipe is damaged","Plumbing","Plumber","Hard",700,1500
+"Water tank pipe is broken","Plumbing","Plumber","Medium",400,800
+"Kitchen sink pipe is blocked","Plumbing","Plumber","Medium",300,600
+"Bathroom drainage pipe is blocked","Plumbing","Plumber","Medium",400,800
+"Fan is not working","Electrical","Electrician","Easy",200,400
+"Ceiling fan needs repair","Electrical","Electrician","Medium",300,600
+"Light switch is broken","Electrical","Electrician","Easy",150,300
+"Electric socket is not working","Electrical","Electrician","Easy",150,300
+"House wiring has a problem","Electrical","Electrician","Hard",800,2000
+"MCB keeps tripping","Electrical","Electrician","Medium",300,700
+"Tube light is not working","Electrical","Electrician","Easy",150,300
+"New ceiling fan installation","Electrical","Electrician","Medium",300,600
+"Door lock is broken","Carpentry","Carpenter","Easy",200,400
+"Wooden door needs repair","Carpentry","Carpenter","Medium",400,800
+"Wooden table is damaged","Carpentry","Carpenter","Medium",500,1000
+"Chair leg is broken","Carpentry","Carpenter","Easy",200,400
+"Wooden cupboard needs repair","Carpentry","Carpenter","Hard",700,1500
+"Door hinge needs replacement","Carpentry","Carpenter","Easy",150,300
+"Wall needs painting","Painting","Painter","Medium",500,1200
+"Room painting required","Painting","Painter","Medium",800,1800
+"Single wall needs repainting","Painting","Painter","Easy",300,700
+"House exterior painting required","Painting","Painter","Hard",1500,4000
+"Bathroom wall needs painting","Painting","Painter","Medium",500,1000
+"AC is not cooling","Appliance Repair","AC Technician","Hard",500,1500
+"Air conditioner needs servicing","Appliance Repair","AC Technician","Medium",300,700
+"Refrigerator is not cooling","Appliance Repair","Refrigerator Technician","Hard",500,1500
+"Washing machine is not working","Appliance Repair","Washing Machine Technician","Medium",400,1000
+"Cooler is not working","Appliance Repair","Appliance Technician","Medium",300,700
+"TV is not turning on","Appliance Repair","TV Technician","Medium",300,800
+"Bathroom tiles are broken","Masonry","Mason","Medium",500,1200
+"Wall plaster is damaged","Masonry","Mason","Medium",400,1000
+"Floor tiles need replacement","Masonry","Mason","Hard",800,2000
+"Brick wall needs repair","Masonry","Mason","Hard",1000,2500
+"Kitchen platform needs repair","Masonry","Mason","Medium",600,1500
