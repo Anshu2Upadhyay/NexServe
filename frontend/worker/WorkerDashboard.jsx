@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
-import { getCurrentUser } from "../services/authService";
+import { getCurrentUser } from "../services/authServices";
 
 export default function WorkerDashboard() {
     const navigate = useNavigate();

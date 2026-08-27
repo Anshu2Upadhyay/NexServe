@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createJob } from "../services/customerService";
+import { createJob } from "../services/customerServices";
+import { getCurrentUser } from "../services/authServices";
 
 const categories = {
     Plumbing: ["Plumber"],
@@ -26,14 +27,21 @@ const basePrices = {
 
 function PostJob() {
     const navigate = useNavigate();
+    const currentUser = getCurrentUser();
 
     const [form, setForm] = useState({
         title: "",
         description: "",
         category: "Plumbing",
         requiredSkill: "Plumber",
-        city: "",
-        area: "",
+        city:
+            currentUser?.city ||
+            currentUser?.location?.city ||
+            "",
+        area:
+            currentUser?.area ||
+            currentUser?.location?.area ||
+            "",
         urgency: "normal",
         bookingType: "instant",
         budgetType: "ai"
@@ -50,10 +58,8 @@ function PostJob() {
 
     const [imageFile, setImageFile] = useState(null);
     const [videoFile, setVideoFile] = useState(null);
-
     const [imagePreview, setImagePreview] = useState("");
     const [videoPreview, setVideoPreview] = useState("");
-
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
@@ -61,7 +67,8 @@ function PostJob() {
     const skills = categories[form.category] || ["General"];
 
     const estimatedPrice = useMemo(() => {
-        const range = basePrices[form.category] || [300, 800];
+        const range =
+            basePrices[form.category] || [300, 800];
 
         if (form.urgency === "urgent") {
             return {
@@ -87,6 +94,93 @@ function PostJob() {
         detectLocation();
     }, []);
 
+    const reverseGeocode = async (latitude, longitude) => {
+        try {
+            setLocationStatus(
+                "Finding your city and area..."
+            );
+
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+                {
+                    headers: {
+                        Accept: "application/json"
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(
+                    "Reverse geocoding failed"
+                );
+            }
+
+            const data = await response.json();
+            const address = data.address || {};
+
+            const detectedCity =
+                address.city ||
+                address.town ||
+                address.municipality ||
+                address.county ||
+                address.village ||
+                "";
+
+            const detectedArea =
+                address.suburb ||
+                address.neighbourhood ||
+                address.residential ||
+                address.city_district ||
+                address.quarter ||
+                "";
+
+            setForm((previous) => ({
+                ...previous,
+                city:
+                    detectedCity ||
+                    previous.city ||
+                    currentUser?.city ||
+                    "",
+                area:
+                    detectedArea ||
+                    previous.area ||
+                    currentUser?.area ||
+                    ""
+            }));
+
+            if (detectedCity || detectedArea) {
+                setLocationStatus(
+                    "Location detected successfully"
+                );
+            } else {
+                setLocationStatus(
+                    "GPS detected. Please confirm city and area."
+                );
+            }
+        } catch (err) {
+            console.error(
+                "Reverse geocoding error:",
+                err
+            );
+
+            setForm((previous) => ({
+                ...previous,
+                city:
+                    previous.city ||
+                    currentUser?.city ||
+                    "",
+                area:
+                    previous.area ||
+                    currentUser?.area ||
+                    ""
+            }));
+
+            setLocationStatus(
+                "GPS detected. Location details loaded."
+            );
+        }
+    };
+
     const detectLocation = () => {
         if (!navigator.geolocation) {
             setLocationStatus(
@@ -98,7 +192,7 @@ function PostJob() {
         setLocationStatus("Detecting location...");
 
         navigator.geolocation.getCurrentPosition(
-            (position) => {
+            async (position) => {
                 const latitude = Number(
                     position.coords.latitude
                 );
@@ -112,62 +206,52 @@ function PostJob() {
                     longitude
                 });
 
-                setLocationStatus("Location detected");
-
-                reverseGeocode(latitude, longitude);
-            },
-            () => {
                 setLocationStatus(
-                    "Location permission denied"
+                    "Location detected"
                 );
+
+                await reverseGeocode(
+                    latitude,
+                    longitude
+                );
+            },
+            (geoError) => {
+                console.error(
+                    "Geolocation error:",
+                    geoError
+                );
+
+                if (
+                    currentUser?.city ||
+                    currentUser?.area
+                ) {
+                    setForm((previous) => ({
+                        ...previous,
+                        city:
+                            previous.city ||
+                            currentUser?.city ||
+                            "",
+                        area:
+                            previous.area ||
+                            currentUser?.area ||
+                            ""
+                    }));
+
+                    setLocationStatus(
+                        "Using your saved location"
+                    );
+                } else {
+                    setLocationStatus(
+                        "Location permission denied"
+                    );
+                }
             },
             {
                 enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 300000
+                timeout: 15000,
+                maximumAge: 0
             }
         );
-    };
-
-    const reverseGeocode = async (latitude, longitude) => {
-        try {
-            const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-            );
-
-            if (!response.ok) {
-                return;
-            }
-
-            const data = await response.json();
-            const address = data.address || {};
-
-            const detectedCity =
-                address.city ||
-                address.town ||
-                address.municipality ||
-                address.village ||
-                "";
-
-            const detectedArea =
-                address.suburb ||
-                address.neighbourhood ||
-                address.residential ||
-                address.city_district ||
-                "";
-
-            setForm((previous) => ({
-                ...previous,
-                city:
-                    previous.city ||
-                    detectedCity,
-                area:
-                    previous.area ||
-                    detectedArea
-            }));
-        } catch {
-            // GPS still works even if reverse geocoding fails.
-        }
     };
 
     const handleChange = (event) => {
@@ -181,6 +265,7 @@ function PostJob() {
 
     const handleCategoryChange = (event) => {
         const category = event.target.value;
+
         const firstSkill =
             categories[category]?.[0] || "General";
 
@@ -194,9 +279,7 @@ function PostJob() {
     const handleImageChange = (event) => {
         const file = event.target.files?.[0];
 
-        if (!file) {
-            return;
-        }
+        if (!file) return;
 
         if (!file.type.startsWith("image/")) {
             setError("Please select a valid image.");
@@ -204,7 +287,9 @@ function PostJob() {
         }
 
         if (file.size > 5 * 1024 * 1024) {
-            setError("Image should be smaller than 5 MB.");
+            setError(
+                "Image should be smaller than 5 MB."
+            );
             return;
         }
 
@@ -218,9 +303,7 @@ function PostJob() {
     const handleVideoChange = (event) => {
         const file = event.target.files?.[0];
 
-        if (!file) {
-            return;
-        }
+        if (!file) return;
 
         if (!file.type.startsWith("video/")) {
             setError("Please select a valid video.");
@@ -228,7 +311,9 @@ function PostJob() {
         }
 
         if (file.size > 30 * 1024 * 1024) {
-            setError("Video should be smaller than 30 MB.");
+            setError(
+                "Video should be smaller than 30 MB."
+            );
             return;
         }
 
@@ -256,7 +341,9 @@ function PostJob() {
         setSuccess("");
 
         if (!form.title.trim()) {
-            setError("Please enter what service you need.");
+            setError(
+                "Please enter what service you need."
+            );
             return;
         }
 
@@ -293,6 +380,7 @@ function PostJob() {
             area: form.area.trim(),
             urgency: form.urgency,
             bookingType: form.bookingType,
+            budgetType: form.budgetType,
             latitude: location.latitude,
             longitude: location.longitude,
             estimatedMinPrice: estimatedPrice.min,
@@ -317,7 +405,9 @@ function PostJob() {
                 response.data?.job ||
                 response.data;
 
-            setSuccess("Job posted successfully.");
+            setSuccess(
+                "Job posted successfully."
+            );
 
             if (job?._id || job?.id) {
                 setTimeout(() => {
@@ -329,10 +419,17 @@ function PostJob() {
                 }, 500);
             } else {
                 setTimeout(() => {
-                    navigate("/customer/my-jobs");
+                    navigate(
+                        "/customer/my-jobs"
+                    );
                 }, 500);
             }
         } catch (err) {
+            console.error(
+                "Create job error:",
+                err
+            );
+
             setError(
                 err?.message ||
                     "Unable to post job. Please try again."
@@ -353,8 +450,8 @@ function PostJob() {
                     <h1>Post a New Job</h1>
 
                     <p>
-                        Tell us what you need and we'll find
-                        the right worker.
+                        Tell us what you need and we'll
+                        find the right worker.
                     </p>
                 </div>
             </div>
@@ -380,8 +477,8 @@ function PostJob() {
                         <div>
                             <h2>What do you need?</h2>
                             <p>
-                                Keep it simple. We'll handle
-                                the matching.
+                                Keep it simple. We'll
+                                handle the matching.
                             </p>
                         </div>
                     </div>
@@ -430,16 +527,16 @@ function PostJob() {
                                     handleCategoryChange
                                 }
                             >
-                                {Object.keys(categories).map(
-                                    (category) => (
-                                        <option
-                                            key={category}
-                                            value={category}
-                                        >
-                                            {category}
-                                        </option>
-                                    )
-                                )}
+                                {Object.keys(
+                                    categories
+                                ).map((category) => (
+                                    <option
+                                        key={category}
+                                        value={category}
+                                    >
+                                        {category}
+                                    </option>
+                                ))}
                             </select>
                         </div>
 
@@ -508,7 +605,8 @@ function PostJob() {
                                     </strong>
 
                                     <small>
-                                        JPG, PNG up to 5 MB
+                                        JPG, PNG up to
+                                        5 MB
                                     </small>
                                 </>
                             )}
@@ -541,7 +639,8 @@ function PostJob() {
                                     </strong>
 
                                     <small>
-                                        Video up to 30 MB
+                                        Video up to
+                                        30 MB
                                     </small>
                                 </>
                             )}
@@ -593,9 +692,10 @@ function PostJob() {
                     <div className="section-header">
                         <div>
                             <h2>Location</h2>
+
                             <p>
-                                We'll use your location to
-                                find nearby workers.
+                                We'll use your location
+                                to find nearby workers.
                             </p>
                         </div>
                     </div>
@@ -610,7 +710,8 @@ function PostJob() {
                                 {locationStatus}
                             </span>
 
-                            {location.latitude !== null && (
+                            {location.latitude !==
+                                null && (
                                 <small>
                                     GPS:{" "}
                                     {location.latitude.toFixed(
@@ -670,9 +771,10 @@ function PostJob() {
                     <div className="section-header">
                         <div>
                             <h2>Service & Price</h2>
+
                             <p>
-                                NexServe estimates the initial
-                                service range.
+                                NexServe estimates the
+                                initial service range.
                             </p>
                         </div>
                     </div>
@@ -695,8 +797,9 @@ function PostJob() {
                             </strong>
 
                             <small>
-                                Final price can change after
-                                the worker checks the job.
+                                Final price can change
+                                after the worker checks
+                                the job.
                             </small>
                         </div>
 
@@ -708,7 +811,8 @@ function PostJob() {
                     <div className="budget-options">
                         <label
                             className={
-                                form.budgetType === "ai"
+                                form.budgetType ===
+                                "ai"
                                     ? "budget-option active"
                                     : "budget-option"
                             }
@@ -730,8 +834,8 @@ function PostJob() {
                                 </strong>
 
                                 <small>
-                                    Best price based on
-                                    the job.
+                                    Best price based
+                                    on the job.
                                 </small>
                             </span>
                         </label>
@@ -761,8 +865,8 @@ function PostJob() {
                                 </strong>
 
                                 <small>
-                                    Worker can suggest a
-                                    suitable price.
+                                    Worker can suggest
+                                    a suitable price.
                                 </small>
                             </span>
                         </label>

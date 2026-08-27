@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { getCurrentUser } from "../services/authService";
+
+import { getCurrentUser } from "../services/authServices";
 
 export default function WorkerProfile() {
     const worker = getCurrentUser();
 
-    const [availability, setAvailability] =
-        useState(true);
+    const [availability, setAvailability] = useState(
+        worker?.isAvailable ?? true
+    );
 
     return (
         <div className="page-container">
@@ -50,6 +52,7 @@ export default function WorkerProfile() {
                     </div>
 
                 </div>
+
 
                 <div
                     className="detail-grid"
@@ -102,15 +105,19 @@ export default function WorkerProfile() {
 
                 </div>
 
+
                 <div
                     style={{
                         marginTop: "25px"
                     }}
                 >
+
                     <div className="worker-availability">
 
                         <div className="availability-info">
+
                             <strong>
+
                                 <span
                                     className={
                                         availability
@@ -122,6 +129,7 @@ export default function WorkerProfile() {
                                 {availability
                                     ? "Available for Jobs"
                                     : "Currently Unavailable"}
+
                             </strong>
 
                             <span>
@@ -129,18 +137,20 @@ export default function WorkerProfile() {
                                     ? "You can receive new service requests."
                                     : "New requests are paused."}
                             </span>
+
                         </div>
+
 
                         <label className="toggle">
 
                             <input
                                 type="checkbox"
                                 checked={availability}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                     setAvailability(
                                         e.target.checked
-                                    )
-                                }
+                                    );
+                                }}
                             />
 
                             <span className="toggle-slider" />
@@ -148,7 +158,9 @@ export default function WorkerProfile() {
                         </label>
 
                     </div>
+
                 </div>
+
 
                 <div
                     style={{
@@ -164,6 +176,7 @@ export default function WorkerProfile() {
                         Skills
                     </h3>
 
+
                     <div
                         style={{
                             display: "flex",
@@ -171,19 +184,22 @@ export default function WorkerProfile() {
                             gap: "8px"
                         }}
                     >
-                        {(worker?.skills || []).length >
-                        0 ? (
+
+                        {(worker?.skills || []).length > 0 ? (
+
                             worker.skills.map(
                                 (skill, index) => (
                                     <span
-                                        key={index}
+                                        key={`${skill}-${index}`}
                                         className="status-badge status-posted"
                                     >
                                         {skill}
                                     </span>
                                 )
                             )
+
                         ) : (
+
                             <span
                                 style={{
                                     color: "#737e91",
@@ -192,12 +208,15 @@ export default function WorkerProfile() {
                             >
                                 No skills added.
                             </span>
+
                         )}
+
                     </div>
 
                 </div>
 
             </div>
+
         </div>
     );
 }

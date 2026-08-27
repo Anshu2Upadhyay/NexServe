@@ -1,4 +1,3 @@
-import React from "react";
 import {
     BrowserRouter,
     Navigate,
@@ -9,6 +8,7 @@ import {
 import "./App.css";
 import "./styles.css";
 
+
 /* =========================
    AUTH
 ========================= */
@@ -16,11 +16,13 @@ import "./styles.css";
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 
+
 /* =========================
    COMPONENTS
 ========================= */
 
 import ProtectedRoute from "../components/ProtectedRoute";
+
 
 /* =========================
    CUSTOMER
@@ -28,9 +30,10 @@ import ProtectedRoute from "../components/ProtectedRoute";
 
 import CustomerDashboard from "../customer/CustomerDashboard";
 import PostJob from "../customer/PostJob";
-import MyJobs from "../customer/MyJobs";
+import NyJobs from "../customer/NyJobs";
 import JobDetails from "../customer/JobDetails";
 import Payment from "../customer/Payment";
+
 
 /* =========================
    WORKER
@@ -39,17 +42,20 @@ import Payment from "../customer/Payment";
 import WorkerDashboard from "../worker/WorkerDashboard";
 import AvailableJobs from "../worker/AvailableJobs";
 import WorkerJobDetails from "../worker/WorkerJobDetails";
+import WorkerNotifications from "../worker/WorkerNotifications";
+import WorkerProfile from "../worker/WorkerProfile";
 
 
 function App() {
+
     return (
         <BrowserRouter>
 
             <Routes>
 
-                {/* =========================================
-                    PUBLIC ROUTES
-                ========================================= */}
+                {/* =========================
+                    PUBLIC
+                ========================= */}
 
                 <Route
                     path="/"
@@ -72,17 +78,18 @@ function App() {
                 />
 
 
-                {/* =========================================
-                    CUSTOMER ROUTES
-                ========================================= */}
+                {/* =========================
+                    CUSTOMER
+                ========================= */}
 
                 <Route
                     element={
-                        <ProtectedRoute role="customer" />
+                        <ProtectedRoute
+                            role="customer"
+                        />
                     }
                 >
 
-                    {/* /customer */}
                     <Route
                         path="/customer"
                         element={
@@ -93,7 +100,6 @@ function App() {
                         }
                     />
 
-                    {/* Customer Dashboard */}
                     <Route
                         path="/customer/dashboard"
                         element={
@@ -101,7 +107,6 @@ function App() {
                         }
                     />
 
-                    {/* Post Job */}
                     <Route
                         path="/customer/post-job"
                         element={
@@ -109,15 +114,13 @@ function App() {
                         }
                     />
 
-                    {/* My Jobs */}
                     <Route
                         path="/customer/my-jobs"
                         element={
-                            <MyJobs />
+                            <NyJobs />
                         }
                     />
 
-                    {/* Customer Job Details */}
                     <Route
                         path="/customer/job/:jobId"
                         element={
@@ -125,7 +128,6 @@ function App() {
                         }
                     />
 
-                    {/* Payment */}
                     <Route
                         path="/customer/payment/:jobId"
                         element={
@@ -136,17 +138,18 @@ function App() {
                 </Route>
 
 
-                {/* =========================================
-                    WORKER ROUTES
-                ========================================= */}
+                {/* =========================
+                    WORKER
+                ========================= */}
 
                 <Route
                     element={
-                        <ProtectedRoute role="worker" />
+                        <ProtectedRoute
+                            role="worker"
+                        />
                     }
                 >
 
-                    {/* /worker */}
                     <Route
                         path="/worker"
                         element={
@@ -157,7 +160,6 @@ function App() {
                         }
                     />
 
-                    {/* Worker Dashboard */}
                     <Route
                         path="/worker/dashboard"
                         element={
@@ -165,7 +167,6 @@ function App() {
                         }
                     />
 
-                    {/* Available Jobs */}
                     <Route
                         path="/worker/available-jobs"
                         element={
@@ -173,7 +174,6 @@ function App() {
                         }
                     />
 
-                    {/* Shortcut */}
                     <Route
                         path="/worker/jobs"
                         element={
@@ -181,7 +181,6 @@ function App() {
                         }
                     />
 
-                    {/* Worker Job Details */}
                     <Route
                         path="/worker/job/:jobId"
                         element={
@@ -189,7 +188,6 @@ function App() {
                         }
                     />
 
-                    {/* AvailableJobs ke View Job ke liye */}
                     <Route
                         path="/worker/jobs/:jobId"
                         element={
@@ -197,12 +195,26 @@ function App() {
                         }
                     />
 
+                    <Route
+                        path="/worker/notifications"
+                        element={
+                            <WorkerNotifications />
+                        }
+                    />
+
+                    <Route
+                        path="/worker/profile"
+                        element={
+                            <WorkerProfile />
+                        }
+                    />
+
                 </Route>
 
 
-                {/* =========================================
+                {/* =========================
                     FALLBACK
-                ========================================= */}
+                ========================= */}
 
                 <Route
                     path="*"

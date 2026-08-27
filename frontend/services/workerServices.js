@@ -1,96 +1,180 @@
 import api from "./api";
 
-// Worker dashboard
-const getWorkerDashboard = async () => {
-    return await api.get("/workers/dashboard");
+
+const createJob = async (
+    jobData
+) => {
+
+    return await api.post(
+        "/jobs",
+        jobData
+    );
 };
 
-// Worker profile
-const getWorkerProfile = async () => {
-    return await api.get("/workers/profile");
+
+const getJobById = async (
+    jobId
+) => {
+
+    return await api.get(
+        `/jobs/${jobId}`
+    );
 };
 
-// Worker online/offline
-const updateAvailability = async (isAvailable) => {
-    return await api.patch("/workers/availability", {
-        isAvailable
-    });
+
+const getCustomerJobs = async () => {
+
+    return await api.get(
+        "/jobs/my-jobs"
+    );
 };
 
-// Worker current GPS location
-const updateLocation = async (latitude, longitude) => {
-    return await api.patch("/workers/location", {
-        latitude,
-        longitude
-    });
-};
 
-// Nearby / available jobs
+const getMyJobs = getCustomerJobs;
+
+
 const getAvailableJobs = async () => {
-    return await api.get("/jobs/available");
+
+    return await api.get(
+        "/jobs/available"
+    );
 };
 
-// Worker ke accepted/current jobs
-const getMyJobs = async () => {
-    return await api.get("/jobs/my-jobs");
+
+const getWorkerJobs = async () => {
+
+    return await api.get(
+        "/jobs/worker/my-jobs"
+    );
 };
 
-// Single job details
-const getJobById = async (jobId) => {
-    return await api.get(`/jobs/${jobId}`);
+
+const acceptJob = async (
+    jobId
+) => {
+
+    return await api.patch(
+        `/jobs/${jobId}/accept`,
+        {}
+    );
 };
 
-// Accept job
-const acceptJob = async (jobId) => {
-    return await api.patch(`/jobs/${jobId}/accept`);
+
+const startTravel = async (
+    jobId
+) => {
+
+    return await api.patch(
+        `/jobs/${jobId}/on-the-way`,
+        {}
+    );
 };
 
-// Start travelling to customer
-const startTravel = async (jobId) => {
-    return await api.patch(`/jobs/${jobId}/start-travel`);
+
+const verifyOTP = async (
+    jobId,
+    otp
+) => {
+
+    return await api.patch(
+        `/jobs/${jobId}/verify-otp`,
+        {
+            otp
+        }
+    );
 };
 
-// Customer OTP verify
-const verifyJobOTP = async (jobId, otp) => {
-    return await api.patch(`/jobs/${jobId}/verify-otp`, {
-        otp
-    });
+
+const verifyJobOTP = verifyOTP;
+
+
+const setFinalPrice = async (
+    jobId,
+    finalPrice
+) => {
+
+    return await api.patch(
+        `/jobs/${jobId}/final-price`,
+        {
+            finalPrice
+        }
+    );
 };
 
-// Final price
-const setFinalPrice = async (jobId, finalPrice) => {
-    return await api.patch(`/jobs/${jobId}/final-price`, {
-        finalPrice
-    });
+
+const payForJob = async (
+    jobId,
+    paymentMethod = "mock"
+) => {
+
+    return await api.patch(
+        `/jobs/${jobId}/payment`,
+        {
+            paymentMethod
+        }
+    );
 };
 
-// Complete job
-const completeJob = async (jobId) => {
-    return await api.patch(`/jobs/${jobId}/complete`);
+
+const makePayment = payForJob;
+
+
+const completeJob = async (
+    jobId
+) => {
+
+    return await api.patch(
+        `/jobs/${jobId}/complete`,
+        {}
+    );
 };
 
-// Worker cancel job
+
 const cancelJob = async (
     jobId,
-    reason = "Cancelled by worker"
+    reason = "Cancelled"
 ) => {
-    return await api.patch(`/jobs/${jobId}/cancel`, {
-        reason
-    });
+
+    return await api.patch(
+        `/jobs/${jobId}/cancel`,
+        {
+            reason
+        }
+    );
 };
 
+
+const rateJob = async (
+    jobId,
+    rating,
+    review = ""
+) => {
+
+    return await api.patch(
+        `/jobs/${jobId}/rate`,
+        {
+            rating,
+            review
+        }
+    );
+};
+
+
 export {
-    getWorkerDashboard,
-    getWorkerProfile,
-    updateAvailability,
-    updateLocation,
-    getAvailableJobs,
-    getMyJobs,
+    createJob,
     getJobById,
+    getCustomerJobs,
+    getMyJobs,
+    getAvailableJobs,
+    getWorkerJobs,
     acceptJob,
     startTravel,
+    verifyOTP,
     verifyJobOTP,
     setFinalPrice,
+    payForJob,
+    makePayment,
     completeJob,
-    cancelJob
+    cancelJob,
+    rateJob
 };

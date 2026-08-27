@@ -1,40 +1,83 @@
 const API_BASE_URL = "http://localhost:5000/api";
 
+
 const getToken = () => {
     return localStorage.getItem("nexserve_token");
 };
 
-const apiRequest = async (endpoint, options = {}) => {
+
+const apiRequest = async (
+    endpoint,
+    options = {}
+) => {
+
     const token = getToken();
 
     const headers = {
         ...(options.body instanceof FormData
             ? {}
-            : { "Content-Type": "application/json" }),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            : {
+                "Content-Type": "application/json"
+            }),
+
+        ...(token
+            ? {
+                Authorization: `Bearer ${token}`
+            }
+            : {}),
+
         ...(options.headers || {})
     };
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers
-    });
+
+    let response;
+
+    try {
+
+        response = await fetch(
+            `${API_BASE_URL}${endpoint}`,
+            {
+                ...options,
+                headers
+            }
+        );
+
+    } catch (error) {
+
+        const networkError =
+            new Error(
+                "Unable to connect to server. Make sure backend is running."
+            );
+
+        networkError.status = 0;
+        networkError.data = null;
+
+        throw networkError;
+    }
+
 
     let data;
 
     try {
+
         data = await response.json();
+
     } catch {
+
         data = {
             success: false,
             message: "Invalid server response"
         };
     }
 
+
     if (!response.ok) {
-        const error = new Error(
-            data.message || `Request failed (${response.status})`
-        );
+
+        const error =
+            new Error(
+                data?.message ||
+                `Request failed (${response.status})`
+            );
 
         error.status = response.status;
         error.data = data;
@@ -42,47 +85,87 @@ const apiRequest = async (endpoint, options = {}) => {
         throw error;
     }
 
+
     return data;
 };
 
+
 const api = {
+
     get: (endpoint) =>
-        apiRequest(endpoint, {
-            method: "GET"
-        }),
+        apiRequest(
+            endpoint,
+            {
+                method: "GET"
+            }
+        ),
 
-    post: (endpoint, body) =>
-        apiRequest(endpoint, {
-            method: "POST",
-            body:
-                body instanceof FormData
-                    ? body
-                    : JSON.stringify(body)
-        }),
 
-    patch: (endpoint, body) =>
-        apiRequest(endpoint, {
-            method: "PATCH",
-            body:
-                body instanceof FormData
-                    ? body
-                    : JSON.stringify(body)
-        }),
+    post: (
+        endpoint,
+        body = {}
+    ) =>
+        apiRequest(
+            endpoint,
+            {
+                method: "POST",
 
-    put: (endpoint, body) =>
-        apiRequest(endpoint, {
-            method: "PUT",
-            body:
-                body instanceof FormData
-                    ? body
-                    : JSON.stringify(body)
-        }),
+                body:
+                    body instanceof FormData
+                        ? body
+                        : JSON.stringify(body)
+            }
+        ),
+
+
+    patch: (
+        endpoint,
+        body = {}
+    ) =>
+        apiRequest(
+            endpoint,
+            {
+                method: "PATCH",
+
+                body:
+                    body instanceof FormData
+                        ? body
+                        : JSON.stringify(body)
+            }
+        ),
+
+
+    put: (
+        endpoint,
+        body = {}
+    ) =>
+        apiRequest(
+            endpoint,
+            {
+                method: "PUT",
+
+                body:
+                    body instanceof FormData
+                        ? body
+                        : JSON.stringify(body)
+            }
+        ),
+
 
     delete: (endpoint) =>
-        apiRequest(endpoint, {
-            method: "DELETE"
-        })
+        apiRequest(
+            endpoint,
+            {
+                method: "DELETE"
+            }
+        )
 };
 
-export { API_BASE_URL, getToken };
+
+export {
+    API_BASE_URL,
+    getToken
+};
+
+
 export default api;

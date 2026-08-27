@@ -1,36 +1,63 @@
-import React from "react";
+import { Navigate, Outlet } from "react-router-dom";
 
-function ProtectedRoute({ children, allowedRole }) {
-    const token = localStorage.getItem("nexserve_token");
-    const userData = localStorage.getItem("nexserve_user");
+import { useAuth } from "../context/AuthContext";
 
-    if (!token || !userData) {
-        window.location.href = "/login";
-        return null;
+
+function ProtectedRoute({ role }) {
+
+    const {
+        user,
+        loading,
+        isAuthenticated
+    } = useAuth();
+
+
+    if (loading) {
+        return (
+            <div className="loading">
+                <div className="spinner" />
+                <p>Loading...</p>
+            </div>
+        );
     }
 
-    let user;
 
-    try {
-        user = JSON.parse(userData);
-    } catch {
-        localStorage.removeItem("nexserve_token");
-        localStorage.removeItem("nexserve_user");
-        window.location.href = "/login";
-        return null;
+    if (!isAuthenticated) {
+        return (
+            <Navigate
+                to="/login"
+                replace
+            />
+        );
     }
 
-    if (allowedRole && user.role !== allowedRole) {
-        if (user.role === "worker") {
-            window.location.href = "/worker";
-        } else {
-            window.location.href = "/customer";
+
+    if (
+        role &&
+        user?.role !== role
+    ) {
+
+        if (user?.role === "worker") {
+            return (
+                <Navigate
+                    to="/worker/dashboard"
+                    replace
+                />
+            );
         }
 
-        return null;
+
+        return (
+            <Navigate
+                to="/customer/dashboard"
+                replace
+            />
+        );
     }
 
-    return children;
+
+    return <Outlet />;
 }
+
 
 export default ProtectedRoute;

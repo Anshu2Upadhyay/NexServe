@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCustomerDashboard } from "../services/customerService";
+
+import { getCustomerDashboard } from "../services/customerServices";
 import Loader from "../components/Loader";
 import StatusBadge from "../components/StatusBadge";
 
@@ -11,11 +12,7 @@ function CustomerDashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    useEffect(() => {
-        loadDashboard();
-    }, []);
-
-    const loadDashboard = async () => {
+    const loadDashboard = useCallback(async () => {
         try {
             setLoading(true);
             setError("");
@@ -24,67 +21,43 @@ function CustomerDashboard() {
 
             if (!response?.success) {
                 throw new Error(
-                    response?.message || "Unable to load dashboard"
+                    response?.message ||
+                    "Unable to load customer dashboard"
                 );
             }
 
-            setDashboard(response.dashboard || response.data || {});
+            setDashboard(response.dashboard || {});
         } catch (err) {
+            console.error(
+                "Customer dashboard error:",
+                err
+            );
+
             setError(
-                err?.message || "Unable to load customer dashboard"
+                err?.message ||
+                "Unable to load customer dashboard"
             );
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    if (loading) {
-        return <Loader />;
-    }
-
-    const jobs = dashboard?.jobs || dashboard?.recentJobs || [];
-
-    const statistics = dashboard?.statistics || {};
-
-    const totalJobs =
-        statistics.totalJobs ??
-        dashboard?.totalJobs ??
-        jobs.length ??
-        0;
-
-    const activeJobs =
-        statistics.activeJobs ??
-        dashboard?.activeJobs ??
-        0;
-
-    const completedJobs =
-        statistics.completedJobs ??
-        dashboard?.completedJobs ??
-        0;
-
-    const acceptedJobs =
-        statistics.acceptedJobs ??
-        dashboard?.acceptedJobs ??
-        0;
-
-    const totalSpent =
-        statistics.totalSpent ??
-        dashboard?.totalSpent ??
-        dashboard?.spent ??
-        0;
+    useEffect(() => {
+        loadDashboard();
+    }, [loadDashboard]);
 
     const formatMoney = (amount) => {
-        return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
-    };
+        const value = Number(amount || 0);
 
-    const getJobStatus = (job) => {
-        return job?.status || "posted";
+        return `₹${value.toLocaleString("en-IN")}`;
     };
 
     const getStatusLabel = (status) => {
         const labels = {
             posted: "Waiting for worker",
+            searching: "Finding a worker",
             accepted: "Worker accepted",
+            on_the_way: "Worker on the way",
             traveling: "Worker on the way",
             arrived: "Worker arrived",
             in_progress: "In progress",
@@ -93,33 +66,70 @@ function CustomerDashboard() {
             cancelled: "Cancelled"
         };
 
-        return labels[status] || status;
+        return labels[status] || status || "Unknown";
     };
+
+    if (loading) {
+        return <Loader />;
+    }
+
+    const statistics = dashboard?.statistics || {};
+
+    const jobs = Array.isArray(
+        dashboard?.recentJobs
+    )
+        ? dashboard.recentJobs
+        : [];
+
+    const totalJobs =
+        Number(statistics.totalJobs || 0);
+
+    const activeJobs =
+        Number(statistics.activeJobs || 0);
+
+    const completedJobs =
+        Number(statistics.completedJobs || 0);
+
+    const totalSpending =
+        Number(statistics.totalSpending || 0);
 
     return (
         <div className="dashboard-page">
+
+            {/* =========================
+                HEADER
+            ========================= */}
+
             <div className="dashboard-header">
                 <div>
                     <span className="page-eyebrow">
                         NEXSERVE
                     </span>
 
-                    <h1>Customer Dashboard</h1>
+                    <h1>
+                        Customer Dashboard
+                    </h1>
 
                     <p>
-                        Manage your service requests and
-                        track your spending.
+                        Manage your service requests
+                        and track your spending.
                     </p>
                 </div>
 
                 <button
-                    className="primary-button"
                     type="button"
-                    onClick={() => navigate("/customer/post-job")}
+                    className="primary-button"
+                    onClick={() =>
+                        navigate("/customer/post-job")
+                    }
                 >
                     + New Job
                 </button>
             </div>
+
+            {/* =========================
+                ERROR
+            ========================= */}
 
             {error && (
                 <div className="error-box">
@@ -134,50 +144,91 @@ function CustomerDashboard() {
                 </div>
             )}
 
+            {/* =========================
+                STATISTICS
+            ========================= */}
+
             <div className="customer-stats">
+
                 <div className="stat-card spending-card">
-                    <div className="stat-icon">₹</div>
+                    <div className="stat-icon">
+                        ₹
+                    </div>
 
                     <div>
-                        <span>Total Spent</span>
+                        <span>
+                            Total Spent
+                        </span>
+
                         <strong>
-                            {formatMoney(totalSpent)}
+                            {formatMoney(
+                                totalSpending
+                            )}
                         </strong>
                     </div>
                 </div>
 
                 <div className="stat-card">
-                    <div className="stat-icon">▣</div>
+                    <div className="stat-icon">
+                        ▣
+                    </div>
 
                     <div>
-                        <span>Total Jobs</span>
-                        <strong>{totalJobs}</strong>
+                        <span>
+                            Total Jobs
+                        </span>
+
+                        <strong>
+                            {totalJobs}
+                        </strong>
                     </div>
                 </div>
 
                 <div className="stat-card">
-                    <div className="stat-icon">◷</div>
+                    <div className="stat-icon">
+                        ◷
+                    </div>
 
                     <div>
-                        <span>Active Jobs</span>
-                        <strong>{activeJobs}</strong>
+                        <span>
+                            Active Jobs
+                        </span>
+
+                        <strong>
+                            {activeJobs}
+                        </strong>
                     </div>
                 </div>
 
                 <div className="stat-card">
-                    <div className="stat-icon">✓</div>
+                    <div className="stat-icon">
+                        ✓
+                    </div>
 
                     <div>
-                        <span>Completed</span>
-                        <strong>{completedJobs}</strong>
+                        <span>
+                            Completed
+                        </span>
+
+                        <strong>
+                            {completedJobs}
+                        </strong>
                     </div>
                 </div>
+
             </div>
 
+            {/* =========================
+                RECENT JOBS
+            ========================= */}
+
             <div className="dashboard-section">
+
                 <div className="section-header">
                     <div>
-                        <h2>Recent Jobs</h2>
+                        <h2>
+                            Recent Jobs
+                        </h2>
 
                         <p>
                             Your latest service requests
@@ -188,7 +239,9 @@ function CustomerDashboard() {
                         type="button"
                         className="text-button"
                         onClick={() =>
-                            navigate("/customer/my-jobs")
+                            navigate(
+                                "/customer/my-jobs"
+                            )
                         }
                     >
                         View all →
@@ -197,11 +250,14 @@ function CustomerDashboard() {
 
                 {jobs.length === 0 ? (
                     <div className="empty-state">
+
                         <div className="empty-icon">
                             ▣
                         </div>
 
-                        <h3>No jobs yet</h3>
+                        <h3>
+                            No jobs yet
+                        </h3>
 
                         <p>
                             Need help with something?
@@ -212,90 +268,139 @@ function CustomerDashboard() {
                             type="button"
                             className="primary-button"
                             onClick={() =>
-                                navigate("/customer/post-job")
+                                navigate(
+                                    "/customer/post-job"
+                                )
                             }
                         >
                             Post a Job
                         </button>
+
                     </div>
                 ) : (
                     <div className="job-list">
-                        {jobs.slice(0, 6).map((job) => {
-                            const status = getJobStatus(job);
 
-                            return (
-                                <button
-                                    type="button"
-                                    className="customer-job-card"
-                                    key={job._id || job.id}
-                                    onClick={() =>
-                                        navigate(
-                                            `/customer/job/${job._id || job.id}`
-                                        )
-                                    }
-                                >
-                                    <div className="job-main">
-                                        <div className="job-title-row">
-                                            <h3>
-                                                {job.title ||
-                                                    "Service Job"}
-                                            </h3>
+                        {jobs
+                            .slice(0, 6)
+                            .map((job) => {
 
-                                            <StatusBadge
-                                                status={status}
-                                            />
+                                const jobId =
+                                    job?._id ||
+                                    job?.id;
+
+                                const status =
+                                    job?.status ||
+                                    "posted";
+
+                                return (
+                                    <button
+                                        type="button"
+                                        className="customer-job-card"
+                                        key={jobId}
+                                        onClick={() => {
+                                            if (!jobId) {
+                                                return;
+                                            }
+
+                                            navigate(
+                                                `/customer/job/${jobId}`
+                                            );
+                                        }}
+                                    >
+
+                                        <div className="job-main">
+
+                                            <div className="job-title-row">
+
+                                                <h3>
+                                                    {job?.title ||
+                                                        "Service Job"}
+                                                </h3>
+
+                                                <StatusBadge
+                                                    status={
+                                                        status
+                                                    }
+                                                />
+
+                                            </div>
+
+                                            <p>
+                                                {job?.description ||
+                                                    "No description available"}
+                                            </p>
+
+                                            <div className="job-meta">
+
+                                                <span>
+                                                    {job?.category ||
+                                                        "General Service"}
+                                                </span>
+
+                                                <span>
+                                                    {job?.area ||
+                                                        job?.city ||
+                                                        "Location unavailable"}
+                                                </span>
+
+                                                <span>
+                                                    {getStatusLabel(
+                                                        status
+                                                    )}
+                                                </span>
+
+                                            </div>
+
                                         </div>
 
-                                        <p>
-                                            {job.description ||
-                                                "No description"}
-                                        </p>
+                                        <div className="job-price">
 
-                                        <div className="job-meta">
+                                            {Number(
+                                                job?.finalPrice
+                                            ) > 0 ? (
+                                                formatMoney(
+                                                    job.finalPrice
+                                                )
+                                            ) : (
+                                                job?.estimatedMinPrice ||
+                                                job?.estimatedMaxPrice ? (
+                                                    <>
+                                                        {formatMoney(
+                                                            job?.estimatedMinPrice
+                                                        )}
+                                                        {" – "}
+                                                        {formatMoney(
+                                                            job?.estimatedMaxPrice
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    "Price pending"
+                                                )
+                                            )}
+
                                             <span>
-                                                {job.category ||
-                                                    "General Service"}
+                                                View details →
                                             </span>
 
-                                            <span>
-                                                {job.area ||
-                                                    job.city ||
-                                                    "Location unavailable"}
-                                            </span>
-
-                                            <span>
-                                                {getStatusLabel(
-                                                    status
-                                                )}
-                                            </span>
                                         </div>
-                                    </div>
 
-                                    <div className="job-price">
-                                        {job.finalPrice > 0
-                                            ? formatMoney(
-                                                  job.finalPrice
-                                              )
-                                            : job.estimatedMinPrice ||
-                                                job.estimatedMaxPrice
-                                            ? `${formatMoney(
-                                                  job.estimatedMinPrice
-                                              )} – ${formatMoney(
-                                                  job.estimatedMaxPrice
-                                              )}`
-                                            : "Price pending"}
+                                    </button>
+                                );
+                            })}
 
-                                        <span>View details →</span>
-                                    </div>
-                                </button>
-                            );
-                        })}
                     </div>
                 )}
+
             </div>
 
+            {/* =========================
+                HELP CARD
+            ========================= */}
+
             <div className="customer-help-card">
+
                 <div>
+
                     <span className="page-eyebrow">
                         NEED A SERVICE?
                     </span>
@@ -305,21 +410,26 @@ function CustomerDashboard() {
                     </h2>
 
                     <p>
-                        NexServe will find the right local
-                        worker for your job.
+                        NexServe will find the right
+                        local worker for your job.
                     </p>
+
                 </div>
 
                 <button
                     type="button"
                     className="primary-button"
                     onClick={() =>
-                        navigate("/customer/post-job")
+                        navigate(
+                            "/customer/post-job"
+                        )
                     }
                 >
                     Post a New Job
                 </button>
+
             </div>
+
         </div>
     );
 }
