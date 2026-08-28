@@ -5,10 +5,13 @@ import { useAuth } from "../../context/AuthContext";
 function Register() {
     const navigate = useNavigate();
     const location = useLocation();
+
     const { register } = useAuth();
 
     const [role, setRole] = useState(
-        location.state?.role || "customer"
+        location.state?.role === "worker"
+            ? "worker"
+            : "customer"
     );
 
     const [form, setForm] = useState({
@@ -27,12 +30,15 @@ function Register() {
         longitude: null
     });
 
-    const [locationStatus, setLocationStatus] = useState(
-        "Detecting location..."
-    );
+    const [locationStatus, setLocationStatus] =
+        useState("Detecting location...");
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+
+    // ======================================================
+    // AUTO DETECT LOCATION
+    // ======================================================
 
     useEffect(() => {
         detectLocation();
@@ -46,18 +52,33 @@ function Register() {
             return;
         }
 
-        setLocationStatus("Detecting your location...");
+        setLocationStatus(
+            "Detecting your location..."
+        );
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
+                const latitude =
+                    position.coords.latitude;
+
+                const longitude =
+                    position.coords.longitude;
+
                 setLocationData({
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude
+                    latitude,
+                    longitude
                 });
 
-                setLocationStatus("Location detected");
+                setLocationStatus(
+                    "Location detected"
+                );
             },
             () => {
+                setLocationData({
+                    latitude: null,
+                    longitude: null
+                });
+
                 setLocationStatus(
                     "Location permission denied. You can continue manually."
                 );
@@ -70,14 +91,29 @@ function Register() {
         );
     };
 
+    // ======================================================
+    // INPUT CHANGE
+    // ======================================================
+
     const handleChange = (e) => {
-        const { name, value } = e.target;
+        const {
+            name,
+            value
+        } = e.target;
 
         setForm((previous) => ({
             ...previous,
             [name]: value
         }));
+
+        if (error) {
+            setError("");
+        }
     };
+
+    // ======================================================
+    // SWITCH ROLE
+    // ======================================================
 
     const switchRole = (newRole) => {
         setRole(newRole);
@@ -90,96 +126,237 @@ function Register() {
         }));
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError("");
+    // ======================================================
+    // VALIDATION
+    // ======================================================
+
+    const validateForm = () => {
+        if (!form.name.trim()) {
+            return "Please enter your full name.";
+        }
+
+        if (!form.email.trim()) {
+            return "Please enter your email.";
+        }
+
+        if (!form.phone.trim()) {
+            return "Please enter your phone number.";
+        }
+
+        if (!/^\d{10}$/.test(form.phone.trim())) {
+            return "Please enter a valid 10-digit phone number.";
+        }
+
+        if (!form.password) {
+            return "Please create a password.";
+        }
+
+        if (form.password.length < 6) {
+            return "Password must be at least 6 characters.";
+        }
+
+        if (!form.city.trim()) {
+            return "Please enter your city.";
+        }
+
+        if (!form.area.trim()) {
+            return "Please enter your area.";
+        }
 
         if (
-            !form.name.trim() ||
-            !form.email.trim() ||
-            !form.phone.trim() ||
-            !form.password ||
-            !form.city.trim() ||
-            !form.area.trim()
+            role === "worker" &&
+            !form.skills.trim()
         ) {
-            setError("Please fill all required fields.");
+            return "Please enter at least one skill.";
+        }
+
+        if (
+            role === "worker" &&
+            form.experience !== "" &&
+            (
+                Number.isNaN(
+                    Number(form.experience)
+                ) ||
+                Number(form.experience) < 0
+            )
+        ) {
+            return "Experience cannot be negative.";
+        }
+
+        return null;
+    };
+
+    // ======================================================
+    // SUBMIT
+    // ======================================================
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        if (loading) {
             return;
         }
 
-        if (role === "worker" && !form.skills.trim()) {
-            setError("Please enter at least one skill.");
+        setError("");
+
+        const validationError =
+            validateForm();
+
+        if (validationError) {
+            setError(validationError);
             return;
         }
 
         const payload = {
             name: form.name.trim(),
-            email: form.email.trim().toLowerCase(),
-            phone: form.phone.trim(),
-            password: form.password,
-            city: form.city.trim(),
-            area: form.area.trim()
+
+            email:
+                form.email
+                    .trim()
+                    .toLowerCase(),
+
+            phone:
+                form.phone.trim(),
+
+            password:
+                form.password,
+
+            city:
+                form.city.trim(),
+
+            area:
+                form.area.trim()
         };
 
+        // ==================================================
+        // LOCATION
+        // ==================================================
+
         if (
-            locationData.latitude !== null &&
-            locationData.longitude !== null
+            typeof locationData.latitude ===
+                "number" &&
+            typeof locationData.longitude ===
+                "number"
         ) {
-            payload.latitude = locationData.latitude;
-            payload.longitude = locationData.longitude;
+            payload.latitude =
+                locationData.latitude;
+
+            payload.longitude =
+                locationData.longitude;
         }
 
-        if (role === "worker") {
-            payload.skills = form.skills
-                .split(",")
-                .map((skill) => skill.trim())
-                .filter(Boolean);
+        // ==================================================
+        // WORKER DATA
+        // ==================================================
 
-            payload.experience = Number(form.experience) || 0;
+        if (role === "worker") {
+            payload.skills =
+                form.skills
+                    .split(",")
+                    .map((skill) =>
+                        skill.trim()
+                    )
+                    .filter(Boolean);
+
+            payload.experience =
+                form.experience === ""
+                    ? 0
+                    : Number(
+                        form.experience
+                    );
         }
 
         try {
             setLoading(true);
 
-            const response = await register(
-                payload,
-                role
-            );
+            const response =
+                await register(
+                    payload,
+                    role
+                );
 
-            const registeredUser = response.user;
+            const registeredUser =
+                response?.user ||
+                response?.worker ||
+                response?.customer;
 
-            if (registeredUser?.role === "worker") {
-                navigate("/worker", {
-                    replace: true
-                });
+            const registeredRole =
+                response?.role ||
+                registeredUser?.role ||
+                role;
+
+            // ==================================================
+            // REDIRECT
+            // ==================================================
+
+            if (
+                registeredRole ===
+                "worker"
+            ) {
+                navigate(
+                    "/worker/dashboard",
+                    {
+                        replace: true
+                    }
+                );
             } else {
-                navigate("/customer", {
-                    replace: true
-                });
+                navigate(
+                    "/customer/home",
+                    {
+                        replace: true
+                    }
+                );
             }
+
         } catch (err) {
-            setError(
-                err?.message ||
-                    "Registration failed. Please try again."
+            console.error(
+                "Registration error:",
+                err
             );
+
+            const message =
+                err?.response?.data?.message ||
+                err?.message ||
+                "Registration failed. Please try again.";
+
+            setError(message);
+
         } finally {
             setLoading(false);
         }
     };
 
+    // ======================================================
+    // UI
+    // ======================================================
+
     return (
         <div className="auth-page">
-            <div className="auth-card register-card">
-                <div className="auth-header">
-                    <div className="auth-logo">N</div>
 
-                    <h1>Create your NexServe account</h1>
+            <div className="auth-card register-card">
+
+                {/* HEADER */}
+                <div className="auth-header">
+
+                    <div className="auth-logo">
+                        N
+                    </div>
+
+                    <h1>
+                        Create your NexServe account
+                    </h1>
 
                     <p>
-                        Choose your account type and get started
+                        Choose your account type
+                        and get started
                     </p>
+
                 </div>
 
+
+                {/* ROLE SELECTOR */}
                 <div className="role-selector">
+
                     <button
                         type="button"
                         className={
@@ -188,8 +365,11 @@ function Register() {
                                 : "role-option"
                         }
                         onClick={() =>
-                            switchRole("customer")
+                            switchRole(
+                                "customer"
+                            )
                         }
+                        disabled={loading}
                     >
                         Customer
                     </button>
@@ -202,24 +382,35 @@ function Register() {
                                 : "role-option"
                         }
                         onClick={() =>
-                            switchRole("worker")
+                            switchRole(
+                                "worker"
+                            )
                         }
+                        disabled={loading}
                     >
                         Worker
                     </button>
+
                 </div>
 
+
+                {/* ERROR */}
                 {error && (
                     <div className="auth-error">
                         {error}
                     </div>
                 )}
 
+
+                {/* FORM */}
                 <form
                     className="auth-form"
                     onSubmit={handleSubmit}
                 >
+
+                    {/* NAME */}
                     <div className="form-group">
+
                         <label htmlFor="name">
                             Full Name *
                         </label>
@@ -230,13 +421,21 @@ function Register() {
                             type="text"
                             placeholder="Enter your name"
                             value={form.name}
-                            onChange={handleChange}
+                            onChange={
+                                handleChange
+                            }
                             autoComplete="name"
+                            disabled={loading}
                         />
+
                     </div>
 
+
+                    {/* EMAIL + PHONE */}
                     <div className="form-row">
+
                         <div className="form-group">
+
                             <label htmlFor="email">
                                 Email *
                             </label>
@@ -247,12 +446,18 @@ function Register() {
                                 type="email"
                                 placeholder="you@example.com"
                                 value={form.email}
-                                onChange={handleChange}
+                                onChange={
+                                    handleChange
+                                }
                                 autoComplete="email"
+                                disabled={loading}
                             />
+
                         </div>
 
+
                         <div className="form-group">
+
                             <label htmlFor="phone">
                                 Phone *
                             </label>
@@ -261,15 +466,25 @@ function Register() {
                                 id="phone"
                                 name="phone"
                                 type="tel"
+                                inputMode="numeric"
+                                maxLength="10"
                                 placeholder="9876543210"
                                 value={form.phone}
-                                onChange={handleChange}
+                                onChange={
+                                    handleChange
+                                }
                                 autoComplete="tel"
+                                disabled={loading}
                             />
+
                         </div>
+
                     </div>
 
+
+                    {/* PASSWORD */}
                     <div className="form-group">
+
                         <label htmlFor="password">
                             Password *
                         </label>
@@ -280,13 +495,25 @@ function Register() {
                             type="password"
                             placeholder="Create a password"
                             value={form.password}
-                            onChange={handleChange}
+                            onChange={
+                                handleChange
+                            }
                             autoComplete="new-password"
+                            disabled={loading}
                         />
+
+                        <small>
+                            Minimum 6 characters.
+                        </small>
+
                     </div>
 
+
+                    {/* CITY + AREA */}
                     <div className="form-row">
+
                         <div className="form-group">
+
                             <label htmlFor="city">
                                 City *
                             </label>
@@ -297,11 +524,17 @@ function Register() {
                                 type="text"
                                 placeholder="Gorakhpur"
                                 value={form.city}
-                                onChange={handleChange}
+                                onChange={
+                                    handleChange
+                                }
+                                disabled={loading}
                             />
+
                         </div>
 
+
                         <div className="form-group">
+
                             <label htmlFor="area">
                                 Area *
                             </label>
@@ -312,14 +545,22 @@ function Register() {
                                 type="text"
                                 placeholder="Pipraich"
                                 value={form.area}
-                                onChange={handleChange}
+                                onChange={
+                                    handleChange
+                                }
+                                disabled={loading}
                             />
+
                         </div>
+
                     </div>
 
+
+                    {/* WORKER FIELDS */}
                     {role === "worker" && (
                         <>
                             <div className="form-group">
+
                                 <label htmlFor="skills">
                                     Skills *
                                 </label>
@@ -330,16 +571,22 @@ function Register() {
                                     type="text"
                                     placeholder="Plumber, Electrician"
                                     value={form.skills}
-                                    onChange={handleChange}
+                                    onChange={
+                                        handleChange
+                                    }
+                                    disabled={loading}
                                 />
 
                                 <small>
-                                    Separate multiple skills
-                                    with commas.
+                                    Separate multiple
+                                    skills with commas.
                                 </small>
+
                             </div>
 
+
                             <div className="form-group">
+
                                 <label htmlFor="experience">
                                     Experience (years)
                                 </label>
@@ -349,16 +596,27 @@ function Register() {
                                     name="experience"
                                     type="number"
                                     min="0"
+                                    step="1"
                                     placeholder="2"
-                                    value={form.experience}
-                                    onChange={handleChange}
+                                    value={
+                                        form.experience
+                                    }
+                                    onChange={
+                                        handleChange
+                                    }
+                                    disabled={loading}
                                 />
+
                             </div>
                         </>
                     )}
 
+
+                    {/* LOCATION */}
                     <div className="location-box">
+
                         <div>
+
                             <strong>
                                 Current Location
                             </strong>
@@ -366,16 +624,23 @@ function Register() {
                             <span>
                                 {locationStatus}
                             </span>
+
                         </div>
 
                         <button
                             type="button"
-                            onClick={detectLocation}
+                            onClick={
+                                detectLocation
+                            }
+                            disabled={loading}
                         >
                             Detect Again
                         </button>
+
                     </div>
 
+
+                    {/* SUBMIT */}
                     <button
                         type="submit"
                         className="auth-submit"
@@ -384,14 +649,18 @@ function Register() {
                         {loading
                             ? "Creating account..."
                             : `Create ${
-                                  role === "worker"
-                                      ? "Worker"
-                                      : "Customer"
-                              } Account`}
+                                role === "worker"
+                                    ? "Worker"
+                                    : "Customer"
+                            } Account`}
                     </button>
+
                 </form>
 
+
+                {/* FOOTER */}
                 <div className="auth-footer">
+
                     <span>
                         Already have an account?
                     </span>
@@ -399,15 +668,24 @@ function Register() {
                     <button
                         type="button"
                         onClick={() =>
-                            navigate("/login", {
-                                state: { role }
-                            })
+                            navigate(
+                                "/login",
+                                {
+                                    state: {
+                                        role
+                                    }
+                                }
+                            )
                         }
+                        disabled={loading}
                     >
                         Login
                     </button>
+
                 </div>
+
             </div>
+
         </div>
     );
 }

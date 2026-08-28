@@ -1,59 +1,80 @@
 import api from "./api";
 
 
-const registerCustomer = async (
-    customerData
-) => {
+// ======================================================
+// NORMALIZE API RESPONSE
+// ======================================================
 
-    return await api.post(
+const unwrapResponse = (response) => {
+    return response?.data ?? response;
+};
+
+
+// ======================================================
+// CUSTOMER REGISTER
+// ======================================================
+
+const registerCustomer = async (customerData) => {
+    const response = await api.post(
         "/auth/customer/register",
         customerData
     );
+
+    return unwrapResponse(response);
 };
 
 
-const registerWorker = async (
-    workerData
-) => {
+// ======================================================
+// WORKER REGISTER
+// ======================================================
 
-    return await api.post(
+const registerWorker = async (workerData) => {
+    const response = await api.post(
         "/auth/worker/register",
         workerData
     );
+
+    return unwrapResponse(response);
 };
 
 
-const loginCustomer = async (
-    credentials
-) => {
+// ======================================================
+// CUSTOMER LOGIN
+// ======================================================
 
-    return await api.post(
+const loginCustomer = async (credentials) => {
+    const response = await api.post(
         "/auth/customer/login",
         credentials
     );
+
+    return unwrapResponse(response);
 };
 
 
-const loginWorker = async (
-    credentials
-) => {
+// ======================================================
+// WORKER LOGIN
+// ======================================================
 
-    return await api.post(
+const loginWorker = async (credentials) => {
+    const response = await api.post(
         "/auth/worker/login",
         credentials
     );
+
+    return unwrapResponse(response);
 };
 
 
-const saveAuthData = (
-    data,
-    role
-) => {
+// ======================================================
+// SAVE AUTH DATA
+// ======================================================
+
+const saveAuthData = (data, role) => {
 
     if (!data?.token) {
-
         throw new Error(
-            "Login successful but token was not received"
+            "Authentication successful but token was not received."
         );
     }
 
@@ -65,9 +86,8 @@ const saveAuthData = (
 
 
     if (!user) {
-
         throw new Error(
-            "User information was not received"
+            "User information was not received."
         );
     }
 
@@ -94,6 +114,10 @@ const saveAuthData = (
 };
 
 
+// ======================================================
+// LOGOUT
+// ======================================================
+
 const logout = () => {
 
     localStorage.removeItem(
@@ -105,6 +129,10 @@ const logout = () => {
     );
 };
 
+
+// ======================================================
+// GET CURRENT USER
+// ======================================================
 
 const getCurrentUser = () => {
 
@@ -125,7 +153,12 @@ const getCurrentUser = () => {
             storedUser
         );
 
-    } catch {
+    } catch (error) {
+
+        console.error(
+            "Invalid stored user data:",
+            error
+        );
 
         localStorage.removeItem(
             "nexserve_user"
@@ -136,6 +169,10 @@ const getCurrentUser = () => {
 };
 
 
+// ======================================================
+// GET CURRENT TOKEN
+// ======================================================
+
 const getCurrentToken = () => {
 
     return localStorage.getItem(
@@ -144,14 +181,28 @@ const getCurrentToken = () => {
 };
 
 
+// ======================================================
+// AUTHENTICATED STATUS
+// ======================================================
+
 const isAuthenticated = () => {
 
+    const token =
+        getCurrentToken();
+
+    const user =
+        getCurrentUser();
+
     return Boolean(
-        getCurrentToken() &&
-        getCurrentUser()
+        token &&
+        user
     );
 };
 
+
+// ======================================================
+// EXPORTS
+// ======================================================
 
 export {
     registerCustomer,

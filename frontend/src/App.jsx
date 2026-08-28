@@ -8,33 +8,50 @@ import {
 import "./App.css";
 import "./styles.css";
 
-import Login from "../pages/auth/Login";
-import Register from "../pages/auth/Register";
+// ======================================================
+// AUTH
+// ======================================================
 
-import ProtectedRoute from "../components/ProtectedRoute";
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
 
-import CustomerHome from "../customer/CustomerHome";
-import CustomerDashboard from "../customer/CustomerDashboard";
-import PostJob from "../customer/PostJob";
-import NyJobs from "../customer/NyJobs";
-import JobDetails from "../customer/JobDetails";
-import Payment from "../customer/Payment";
+import ProtectedRoute from "./components/ProtectedRoute";
 
-import WorkerDashboard from "../worker/WorkerDashboard";
-import AvailableJobs from "../worker/AvailableJobs";
-import WorkerJobDetails from "../worker/WorkerJobDetails";
-import WorkerNotifications from "../worker/WorkerNotifications";
-import WorkerProfile from "../worker/WorkerProfile";
+// ======================================================
+// CUSTOMER
+// ======================================================
 
+import CustomerHome from "./customer/CustomerHome";
+import CustomerDashboard from "./customer/CustomerDashboard";
+import PostJob from "./customer/PostJob";
+import MyJobs from "./customer/MyJobs";
+import JobDetails from "./customer/JobDetails";
+import Payment from "./customer/Payment";
+
+// ======================================================
+// WORKER
+// ======================================================
+
+import WorkerDashboard from "./worker/WorkerDashboard";
+import AvailableJobs from "./worker/AvailableJobs";
+import WorkerJobDetails from "./worker/WorkerJobDetails";
+import WorkerNotifications from "./worker/WorkerNotifications";
+import WorkerProfile from "./worker/WorkerProfile";
+
+
+// ======================================================
+// APP
+// ======================================================
 
 function App() {
     return (
         <BrowserRouter>
+
             <Routes>
 
-                {/* =========================
-                    PUBLIC
-                ========================= */}
+                {/* ==================================================
+                    PUBLIC ROUTES
+                ================================================== */}
 
                 <Route
                     path="/"
@@ -57,9 +74,9 @@ function App() {
                 />
 
 
-                {/* =========================
-                    CUSTOMER
-                ========================= */}
+                {/* ==================================================
+                    CUSTOMER ROUTES
+                ================================================== */}
 
                 <Route
                     element={
@@ -69,7 +86,7 @@ function App() {
                     }
                 >
 
-                    {/* CUSTOMER ROOT */}
+                    {/* Customer root */}
                     <Route
                         path="/customer"
                         element={
@@ -80,48 +97,60 @@ function App() {
                         }
                     />
 
-                    {/* CUSTOMER HOME */}
+                    {/* Customer home */}
                     <Route
                         path="/customer/home"
-                        element={<CustomerHome />}
+                        element={
+                            <CustomerHome />
+                        }
                     />
 
-                    {/* CUSTOMER DASHBOARD */}
+                    {/* Customer dashboard */}
                     <Route
                         path="/customer/dashboard"
-                        element={<CustomerDashboard />}
+                        element={
+                            <CustomerDashboard />
+                        }
                     />
 
-                    {/* POST JOB */}
+                    {/* Post job */}
                     <Route
                         path="/customer/post-job"
-                        element={<PostJob />}
+                        element={
+                            <PostJob />
+                        }
                     />
 
-                    {/* MY JOBS */}
+                    {/* My jobs */}
                     <Route
                         path="/customer/my-jobs"
-                        element={<NyJobs />}
+                        element={
+                            <MyJobs />
+                        }
                     />
 
-                    {/* JOB DETAILS */}
+                    {/* Single job */}
                     <Route
                         path="/customer/job/:jobId"
-                        element={<JobDetails />}
+                        element={
+                            <JobDetails />
+                        }
                     />
 
-                    {/* PAYMENT */}
+                    {/* Payment */}
                     <Route
                         path="/customer/payment/:jobId"
-                        element={<Payment />}
+                        element={
+                            <Payment />
+                        }
                     />
 
                 </Route>
 
 
-                {/* =========================
-                    WORKER
-                ========================= */}
+                {/* ==================================================
+                    WORKER ROUTES
+                ================================================== */}
 
                 <Route
                     element={
@@ -131,6 +160,7 @@ function App() {
                     }
                 >
 
+                    {/* Worker root */}
                     <Route
                         path="/worker"
                         element={
@@ -141,47 +171,68 @@ function App() {
                         }
                     />
 
+                    {/* Dashboard */}
                     <Route
                         path="/worker/dashboard"
-                        element={<WorkerDashboard />}
+                        element={
+                            <WorkerDashboard />
+                        }
                     />
 
+                    {/* Available jobs */}
                     <Route
                         path="/worker/available-jobs"
-                        element={<AvailableJobs />}
+                        element={
+                            <AvailableJobs />
+                        }
                     />
 
+                    {/* Backward-compatible route */}
                     <Route
                         path="/worker/jobs"
-                        element={<AvailableJobs />}
+                        element={
+                            <AvailableJobs />
+                        }
                     />
 
+                    {/* Worker job details */}
                     <Route
                         path="/worker/job/:jobId"
-                        element={<WorkerJobDetails />}
+                        element={
+                            <WorkerJobDetails />
+                        }
                     />
 
+                    {/* Backward-compatible route */}
                     <Route
                         path="/worker/jobs/:jobId"
-                        element={<WorkerJobDetails />}
+                        element={
+                            <WorkerJobDetails />
+                        }
                     />
 
+                    {/* Notifications */}
                     <Route
                         path="/worker/notifications"
-                        element={<WorkerNotifications />}
+                        element={
+                            <WorkerNotifications />
+                        }
                     />
 
+                    {/* Profile */}
                     <Route
                         path="/worker/profile"
-                        element={<WorkerProfile />}
+                        element={
+                            <WorkerProfile />
+                        }
                     />
 
                 </Route>
 
 
-                {/* =========================
+                {/* ==================================================
                     FALLBACK
-                ========================= */}
+                ================================================== */}
 
                 <Route
                     path="*"
@@ -194,6 +245,7 @@ function App() {
                 />
 
             </Routes>
+
         </BrowserRouter>
     );
 }

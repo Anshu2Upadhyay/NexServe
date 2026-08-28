@@ -1,13 +1,24 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 
 function CustomerHome() {
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
+    const {
+        user,
+        logout
+    } = useAuth();
 
     const firstName =
-        user?.name?.split(" ")[0] || "there";
+        user?.name
+            ?.trim()
+            ?.split(/\s+/)[0] ||
+        "there";
+
+
+    // ======================================================
+    // SERVICES
+    // ======================================================
 
     const services = [
         {
@@ -42,66 +53,130 @@ function CustomerHome() {
         }
     ];
 
-    const handleLogout = () => {
-        logout();
-        navigate("/login", { replace: true });
+
+    // ======================================================
+    // NAVIGATION
+    // ======================================================
+
+    const goHome = () => {
+        navigate("/customer/home");
     };
+
+
+    const goMyJobs = () => {
+        navigate("/customer/my-jobs");
+    };
+
+
+    const goDashboard = () => {
+        navigate("/customer/dashboard");
+    };
+
+
+    const goPostJob = (service = null) => {
+
+        if (service) {
+            navigate(
+                "/customer/post-job",
+                {
+                    state: {
+                        service
+                    }
+                }
+            );
+
+            return;
+        }
+
+        navigate(
+            "/customer/post-job"
+        );
+    };
+
+
+    // ======================================================
+    // LOGOUT
+    // ======================================================
+
+    const handleLogout = () => {
+
+        logout();
+
+        navigate(
+            "/login",
+            {
+                replace: true
+            }
+        );
+    };
+
+
+    // ======================================================
+    // RENDER
+    // ======================================================
 
     return (
         <div className="customer-home">
 
-            {/* =========================
+            {/* ==================================================
                 NAVBAR
-            ========================= */}
+            ================================================== */}
 
             <header className="customer-home-nav">
 
-                <div
+                <button
+                    type="button"
                     className="brand"
-                    onClick={() =>
-                        navigate("/customer/home")
-                    }
+                    onClick={goHome}
+                    aria-label="Go to NexServe home"
                 >
                     NEX<span>SERVE</span>
-                </div>
+                </button>
 
-                <nav className="home-nav-links">
+
+                <nav
+                    className="home-nav-links"
+                    aria-label="Customer navigation"
+                >
 
                     <button
                         type="button"
                         className="nav-link active"
-                        onClick={() =>
-                            navigate("/customer/home")
-                        }
+                        onClick={goHome}
                     >
                         Home
                     </button>
 
-                    <button
-                        type="button"
-                        className="nav-link"
-                        onClick={() =>
-                            navigate("/customer/my-jobs")
-                        }
-                    >
-                        My Jobs
-                    </button>
 
                     <button
                         type="button"
                         className="nav-link"
-                        onClick={() =>
-                            navigate("/customer/dashboard")
-                        }
+                        onClick={goMyJobs}
+                    >
+                        My Jobs
+                    </button>
+
+
+                    <button
+                        type="button"
+                        className="nav-link"
+                        onClick={goDashboard}
                     >
                         Dashboard
                     </button>
 
                 </nav>
 
+
                 <div className="home-nav-right">
 
-                    <div className="user-chip">
+                    <button
+                        type="button"
+                        className="user-chip"
+                        onClick={goDashboard}
+                        aria-label="Open dashboard"
+                    >
+
                         <div className="user-avatar">
                             {firstName
                                 .charAt(0)
@@ -111,7 +186,9 @@ function CustomerHome() {
                         <span>
                             {firstName}
                         </span>
-                    </div>
+
+                    </button>
+
 
                     <button
                         type="button"
@@ -126,11 +203,15 @@ function CustomerHome() {
             </header>
 
 
-            {/* =========================
-                HERO
-            ========================= */}
+            {/* ==================================================
+                MAIN
+            ================================================== */}
 
             <main>
+
+                {/* ==================================================
+                    HERO
+                ================================================== */}
 
                 <section className="customer-hero">
 
@@ -140,11 +221,15 @@ function CustomerHome() {
                             LOCAL SERVICES • ON DEMAND
                         </span>
 
+
                         <h1>
                             What do you need
                             <br />
-                            <span>help with today?</span>
+                            <span>
+                                help with today?
+                            </span>
                         </h1>
+
 
                         <p>
                             Tell us what you need and
@@ -152,13 +237,12 @@ function CustomerHome() {
                             a trusted local professional.
                         </p>
 
+
                         <button
                             type="button"
                             className="hero-primary-button"
                             onClick={() =>
-                                navigate(
-                                    "/customer/post-job"
-                                )
+                                goPostJob()
                             }
                         >
                             + Post a New Job
@@ -166,14 +250,20 @@ function CustomerHome() {
 
                     </div>
 
-                    <div className="hero-visual">
+
+                    <div
+                        className="hero-visual"
+                        aria-hidden="true"
+                    >
 
                         <div className="hero-circle">
+
                             <div className="hero-card">
 
                                 <span className="hero-card-icon">
                                     ✓
                                 </span>
+
 
                                 <div>
                                     <strong>
@@ -187,13 +277,17 @@ function CustomerHome() {
 
                             </div>
 
+
                             <div className="hero-floating-card">
+
                                 <strong>
                                     Fast & Reliable
                                 </strong>
+
                                 <span>
                                     Local workers near you
                                 </span>
+
                             </div>
 
                         </div>
@@ -203,36 +297,39 @@ function CustomerHome() {
                 </section>
 
 
-                {/* =========================
+                {/* ==================================================
                     SERVICES
-                ========================= */}
+                ================================================== */}
 
                 <section className="services-section">
 
                     <div className="section-heading">
 
                         <div>
+
                             <span>
                                 EXPLORE SERVICES
                             </span>
+
 
                             <h2>
                                 What can we help you with?
                             </h2>
 
+
                             <p>
                                 Choose a service or tell us
                                 exactly what you need.
                             </p>
+
                         </div>
+
 
                         <button
                             type="button"
                             className="view-all-button"
                             onClick={() =>
-                                navigate(
-                                    "/customer/post-job"
-                                )
+                                goPostJob()
                             }
                         >
                             View all →
@@ -243,64 +340,69 @@ function CustomerHome() {
 
                     <div className="services-grid">
 
-                        {services.map((service) => (
-                            <button
-                                type="button"
-                                className="service-card"
-                                key={service.title}
-                                onClick={() =>
-                                    navigate(
-                                        "/customer/post-job",
-                                        {
-                                            state: {
-                                                service:
-                                                    service.title
-                                            }
-                                        }
-                                    )
-                                }
-                            >
+                        {services.map(
+                            (service) => (
 
-                                <div className="service-icon">
-                                    {service.icon}
-                                </div>
+                                <button
+                                    type="button"
+                                    className="service-card"
+                                    key={
+                                        service.title
+                                    }
+                                    onClick={() =>
+                                        goPostJob(
+                                            service.title
+                                        )
+                                    }
+                                    aria-label={
+                                        `Post a ${service.title} job`
+                                    }
+                                >
 
-                                <div className="service-info">
+                                    <div className="service-icon">
+                                        {service.icon}
+                                    </div>
 
-                                    <h3>
-                                        {service.title}
-                                    </h3>
 
-                                    <p>
-                                        {service.text}
-                                    </p>
+                                    <div className="service-info">
 
-                                </div>
+                                        <h3>
+                                            {service.title}
+                                        </h3>
 
-                                <span className="service-arrow">
-                                    →
-                                </span>
 
-                            </button>
-                        ))}
+                                        <p>
+                                            {service.text}
+                                        </p>
+
+                                    </div>
+
+
+                                    <span className="service-arrow">
+                                        →
+                                    </span>
+
+                                </button>
+
+                            )
+                        )}
 
                     </div>
 
                 </section>
 
 
-                {/* =========================
+                {/* ==================================================
                     QUICK ACTIONS
-                ========================= */}
+                ================================================== */}
 
                 <section className="quick-actions">
 
-                    <div
+                    <button
+                        type="button"
                         className="quick-card"
                         onClick={() =>
-                            navigate(
-                                "/customer/post-job"
-                            )
+                            goPostJob()
                         }
                     >
 
@@ -308,66 +410,75 @@ function CustomerHome() {
                             +
                         </div>
 
+
                         <div>
+
                             <h3>
                                 Need something else?
                             </h3>
+
 
                             <p>
                                 Describe your problem and
                                 we'll find the right worker.
                             </p>
+
                         </div>
+
 
                         <span>
                             →
                         </span>
 
-                    </div>
+                    </button>
 
 
-                    <div
+                    <button
+                        type="button"
                         className="quick-card"
-                        onClick={() =>
-                            navigate(
-                                "/customer/my-jobs"
-                            )
-                        }
+                        onClick={goMyJobs}
                     >
 
                         <div className="quick-icon">
                             ▣
                         </div>
 
+
                         <div>
+
                             <h3>
                                 Track your jobs
                             </h3>
+
 
                             <p>
                                 Check worker status,
                                 payments and job history.
                             </p>
+
                         </div>
+
 
                         <span>
                             →
                         </span>
 
-                    </div>
+                    </button>
 
                 </section>
 
             </main>
 
 
-            {/* =========================
+            {/* ==================================================
                 FOOTER
-            ========================= */}
+            ================================================== */}
 
             <footer className="customer-home-footer">
 
-                <strong>NEXSERVE</strong>
+                <strong>
+                    NEXSERVE
+                </strong>
 
                 <span>
                     Local help. Trusted workers.

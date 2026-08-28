@@ -1,8 +1,84 @@
-const mongoose = require("mongoose");
-
 const Worker = require("../models/Worker");
 const Job = require("../models/Job");
 
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const SERVICE_RADIUS_KM = 5;
+
+const ACTIVE_JOB_STATUSES = [
+    "accepted",
+    "on_the_way",
+    "in_progress"
+];
+
+const AVAILABLE_JOB_STATUSES = [
+    "posted",
+    "searching"
+];
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+const hasValidCoordinates = (latitude, longitude) => {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    return (
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180
+    );
+};
+
+const normalizeString = (value) => {
+    return String(value || "").trim().toLowerCase();
+};
+
+const calculateDistance = (
+    lat1,
+    lon1,
+    lat2,
+    lon2
+) => {
+    const R = 6371;
+
+    const dLat =
+        (lat2 - lat1) *
+        Math.PI /
+        180;
+
+    const dLon =
+        (lon2 - lon1) *
+        Math.PI /
+        180;
+
+    const a =
+        Math.sin(dLat / 2) *
+        Math.sin(dLat / 2) +
+        Math.cos(
+            lat1 * Math.PI / 180
+        ) *
+        Math.cos(
+            lat2 * Math.PI / 180
+        ) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+    const c =
+        2 *
+        Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1 - a)
+        );
+
+    return R * c;
+};
 
 // ======================================================
 // GET LOGGED-IN WORKER PROFILE
@@ -10,10 +86,9 @@ const Job = require("../models/Job");
 
 const getMyProfile = async (req, res) => {
     try {
-        const worker =
-            await Worker.findById(
-                req.user.id
-            ).select("-password");
+        const worker = await Worker.findById(
+            req.user.id
+        ).select("-password");
 
         if (!worker) {
             return res.status(404).json({
@@ -41,7 +116,6 @@ const getMyProfile = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // UPDATE WORKER PROFILE
 // ======================================================
@@ -57,40 +131,69 @@ const updateMyProfile = async (req, res) => {
             experience
         } = req.body || {};
 
-        const worker =
-            await Worker.findById(
-                req.user.id
-            );
+        const worker = await Worker.findById(
+            req.user.id
+        );
 
         if (!worker) {
             return res.status(404).json({
                 success: false,
-                message:
-                    "Worker not found"
+                message: "Worker not found"
             });
         }
 
-
         if (name !== undefined) {
-            worker.name =
+            const cleanName =
                 String(name).trim();
+
+            if (cleanName.length < 2) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Name must contain at least 2 characters"
+                });
+            }
+
+            worker.name = cleanName;
         }
 
         if (phone !== undefined) {
-            worker.phone =
+            const cleanPhone =
                 String(phone).trim();
+
+            if (
+                cleanPhone &&
+                !/^[6-9]\d{9}$/.test(cleanPhone)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Please enter a valid 10-digit Indian mobile number"
+                });
+            }
+
+            worker.phone = cleanPhone;
         }
 
         if (city !== undefined) {
-            worker.city =
+            const cleanCity =
                 String(city).trim();
+
+            if (!cleanCity) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "City cannot be empty"
+                });
+            }
+
+            worker.city = cleanCity;
         }
 
         if (area !== undefined) {
             worker.area =
                 String(area).trim();
         }
-
 
         if (skills !== undefined) {
             if (!Array.isArray(skills)) {
@@ -101,20 +204,38 @@ const updateMyProfile = async (req, res) => {
                 });
             }
 
-            worker.skills =
+            const cleanedSkills =
                 skills
                     .map(skill =>
                         String(skill).trim()
                     )
                     .filter(Boolean);
-        }
 
+            worker.skills = [
+                ...new Set(cleanedSkills)
+            ];
+        }
 
         if (experience !== undefined) {
-            worker.experience =
-                experience;
-        }
+            const numericExperience =
+                Number(experience);
 
+            if (
+                !Number.isFinite(
+                    numericExperience
+                ) ||
+                numericExperience < 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Experience must be a valid non-negative number"
+                });
+            }
+
+            worker.experience =
+                numericExperience;
+        }
 
         await worker.save();
 
@@ -127,8 +248,7 @@ const updateMyProfile = async (req, res) => {
             success: true,
             message:
                 "Worker profile updated successfully",
-            worker:
-                updatedWorker
+            worker: updatedWorker
         });
 
     } catch (error) {
@@ -145,19 +265,15 @@ const updateMyProfile = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // UPDATE WORKER ONLINE/OFFLINE STATUS
 // ======================================================
 
 const updateAvailability = async (req, res) => {
     try {
-        const body =
-            req.body || {};
-
         const {
             isAvailable
-        } = body;
+        } = req.body || {};
 
         if (
             typeof isAvailable !==
@@ -171,16 +287,9 @@ const updateAvailability = async (req, res) => {
         }
 
         const worker =
-            await Worker.findByIdAndUpdate(
-                req.user.id,
-                {
-                    isAvailable
-                },
-                {
-                    new: true,
-                    runValidators: true
-                }
-            ).select("-password");
+            await Worker.findById(
+                req.user.id
+            );
 
         if (!worker) {
             return res.status(404).json({
@@ -190,13 +299,107 @@ const updateAvailability = async (req, res) => {
             });
         }
 
+        // ==============================================
+        // GOING ONLINE
+        // ==============================================
+
+        if (isAvailable) {
+            const activeJob =
+                await Job.findOne({
+                    assignedWorker:
+                        worker._id,
+
+                    status: {
+                        $in:
+                            ACTIVE_JOB_STATUSES
+                    }
+                }).select(
+                    "_id title status"
+                );
+
+            if (activeJob) {
+                return res.status(409).json({
+                    success: false,
+                    message:
+                        "You cannot go online while you have an active job. Complete or cancel the current job first.",
+                    activeJob
+                });
+            }
+
+            if (
+                !hasValidCoordinates(
+                    worker.location?.latitude,
+                    worker.location?.longitude
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Please update your current location before going online"
+                });
+            }
+
+            if (
+                !String(
+                    worker.city || ""
+                ).trim()
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Please update your city before going online"
+                });
+            }
+
+            if (
+                !Array.isArray(worker.skills) ||
+                worker.skills.length === 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Please add at least one skill before going online"
+                });
+            }
+        }
+
+        // ==============================================
+        // UPDATE AVAILABILITY
+        // ==============================================
+
+        const updatedWorker =
+            await Worker.findOneAndUpdate(
+                {
+                    _id: worker._id
+                },
+                {
+                    $set: {
+                        isAvailable
+                    }
+                },
+                {
+                    new: true,
+                    runValidators: true
+                }
+            ).select("-password");
+
+        if (!updatedWorker) {
+            return res.status(404).json({
+                success: false,
+                message:
+                    "Worker not found"
+            });
+        }
+
         res.status(200).json({
             success: true,
+
             message:
                 isAvailable
                     ? "You are now online"
                     : "You are now offline",
-            worker
+
+            worker: updatedWorker
         });
 
     } catch (error) {
@@ -213,26 +416,23 @@ const updateAvailability = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // UPDATE WORKER CURRENT LOCATION
 // ======================================================
 
 const updateLocation = async (req, res) => {
     try {
-        const body =
-            req.body || {};
-
         const {
             latitude,
             longitude
-        } = body;
+        } = req.body || {};
+
+        const lat = Number(latitude);
+        const lng = Number(longitude);
 
         if (
-            typeof latitude !==
-                "number" ||
-            typeof longitude !==
-                "number"
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lng)
         ) {
             return res.status(400).json({
                 success: false,
@@ -242,10 +442,10 @@ const updateLocation = async (req, res) => {
         }
 
         if (
-            latitude < -90 ||
-            latitude > 90 ||
-            longitude < -180 ||
-            longitude > 180
+            !hasValidCoordinates(
+                lat,
+                lng
+            )
         ) {
             return res.status(400).json({
                 success: false,
@@ -259,8 +459,8 @@ const updateLocation = async (req, res) => {
                 req.user.id,
                 {
                     location: {
-                        latitude,
-                        longitude
+                        latitude: lat,
+                        longitude: lng
                     }
                 },
                 {
@@ -299,7 +499,6 @@ const updateLocation = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // WORKER DASHBOARD
 // ======================================================
@@ -319,7 +518,6 @@ const getWorkerDashboard = async (req, res) => {
             });
         }
 
-
         const [
             totalJobs,
             activeJobs,
@@ -337,11 +535,8 @@ const getWorkerDashboard = async (req, res) => {
                     worker._id,
 
                 status: {
-                    $in: [
-                        "accepted",
-                        "on_the_way",
-                        "in_progress"
-                    ]
+                    $in:
+                        ACTIVE_JOB_STATUSES
                 }
             }),
 
@@ -362,18 +557,43 @@ const getWorkerDashboard = async (req, res) => {
             })
         ]);
 
+        // ==============================================
+        // EFFECTIVE AVAILABILITY
+        // ==============================================
 
-        // Nearby available jobs
+        let effectiveAvailability =
+            Boolean(
+                worker.isAvailable
+            );
+
+        if (activeJobs > 0) {
+            effectiveAvailability = false;
+        }
+
+        // ==============================================
+        // NEARBY AVAILABLE JOBS
+        // ==============================================
+
         let nearbyJobs = [];
 
+        const workerHasLocation =
+            hasValidCoordinates(
+                worker.location?.latitude,
+                worker.location?.longitude
+            );
+
+        const workerHasSkills =
+            Array.isArray(
+                worker.skills
+            ) &&
+            worker.skills.length > 0;
+
         if (
-            worker.isAvailable &&
-            worker.location?.latitude !==
-                undefined &&
-            worker.location?.longitude !==
-                undefined
+            effectiveAvailability &&
+            workerHasLocation &&
+            workerHasSkills
         ) {
-            nearbyJobs =
+            const jobs =
                 await Job.find({
                     city:
                         worker.city,
@@ -384,10 +604,8 @@ const getWorkerDashboard = async (req, res) => {
                     },
 
                     status: {
-                        $in: [
-                            "posted",
-                            "searching"
-                        ]
+                        $in:
+                            AVAILABLE_JOB_STATUSES
                     },
 
                     assignedWorker:
@@ -399,10 +617,56 @@ const getWorkerDashboard = async (req, res) => {
                     )
                     .sort({
                         createdAt: -1
-                    })
-                    .limit(10);
-        }
+                    });
 
+            nearbyJobs =
+                jobs
+                    .map(job => {
+
+                        if (
+                            !hasValidCoordinates(
+                                job.location?.latitude,
+                                job.location?.longitude
+                            )
+                        ) {
+                            return null;
+                        }
+
+                        const distance =
+                            calculateDistance(
+                                worker.location.latitude,
+                                worker.location.longitude,
+                                job.location.latitude,
+                                job.location.longitude
+                            );
+
+                        if (
+                            !Number.isFinite(
+                                distance
+                            ) ||
+                            distance >
+                                SERVICE_RADIUS_KM
+                        ) {
+                            return null;
+                        }
+
+                        return {
+                            ...job.toObject(),
+
+                            distance:
+                                Number(
+                                    distance.toFixed(2)
+                                )
+                        };
+                    })
+                    .filter(Boolean)
+                    .sort(
+                        (a, b) =>
+                            a.distance -
+                            b.distance
+                    )
+                    .slice(0, 10);
+        }
 
         res.status(200).json({
             success: true,
@@ -425,10 +689,13 @@ const getWorkerDashboard = async (req, res) => {
                         worker.skills,
 
                     isAvailable:
-                        worker.isAvailable,
+                        effectiveAvailability,
 
                     rating:
-                        worker.rating || 0
+                        worker.rating || 0,
+
+                    location:
+                        worker.location
                 },
 
                 statistics: {
@@ -465,10 +732,8 @@ const getWorkerDashboard = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // WORKER EARNINGS
-// MINI PROJECT = FAKE/DISPLAY ONLY
 // ======================================================
 
 const getWorkerEarnings = async (req, res) => {
@@ -491,24 +756,29 @@ const getWorkerEarnings = async (req, res) => {
                     updatedAt: -1
                 });
 
-
         const totalEarnings =
             jobs.reduce(
-                (total, job) =>
+                (
+                    total,
+                    job
+                ) =>
                     total +
-                    Number(
-                        job.finalPrice || 0
+                    (
+                        Number(
+                            job.finalPrice
+                        ) || 0
                     ),
                 0
             );
-
 
         res.status(200).json({
             success: true,
 
             earnings: {
                 total:
-                    totalEarnings,
+                    Number(
+                        totalEarnings.toFixed(2)
+                    ),
 
                 completedJobs:
                     jobs.length,
@@ -531,7 +801,6 @@ const getWorkerEarnings = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // SEARCH + FILTER AVAILABLE JOBS
 // ======================================================
@@ -551,6 +820,54 @@ const searchWorkerJobs = async (req, res) => {
             });
         }
 
+        // ==============================================
+        // ACTIVE JOB PROTECTION
+        // ==============================================
+
+        const activeJob =
+            await Job.findOne({
+                assignedWorker:
+                    worker._id,
+
+                status: {
+                    $in:
+                        ACTIVE_JOB_STATUSES
+                }
+            }).select(
+                "_id title status"
+            );
+
+        if (activeJob) {
+            return res.status(200).json({
+                success: true,
+
+                count: 0,
+
+                message:
+                    "You already have an active job",
+
+                activeJob,
+
+                jobs: []
+            });
+        }
+
+        // ==============================================
+        // LOCATION CHECK
+        // ==============================================
+
+        if (
+            !hasValidCoordinates(
+                worker.location?.latitude,
+                worker.location?.longitude
+            )
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Please update your current location first"
+            });
+        }
 
         const {
             category,
@@ -560,8 +877,33 @@ const searchWorkerJobs = async (req, res) => {
             maxPrice,
             status,
             limit = 20
-        } = req.query;
+        } = req.query || {};
 
+        // ==============================================
+        // LIMIT
+        // ==============================================
+
+        const parsedLimit =
+            Number(limit);
+
+        const safeLimit =
+            Number.isFinite(
+                parsedLimit
+            )
+                ? Math.min(
+                    Math.max(
+                        Math.floor(
+                            parsedLimit
+                        ),
+                        1
+                    ),
+                    50
+                )
+                : 20;
+
+        // ==============================================
+        // BASE QUERY
+        // ==============================================
 
         const query = {
             city:
@@ -571,58 +913,111 @@ const searchWorkerJobs = async (req, res) => {
                 null
         };
 
+        // ==============================================
+        // STATUS
+        // ==============================================
 
-        // Status filter
         if (status) {
+            if (
+                !AVAILABLE_JOB_STATUSES.includes(
+                    String(status)
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid job status"
+                });
+            }
+
             query.status =
-                status;
+                String(status);
+
         } else {
             query.status = {
-                $in: [
-                    "posted",
-                    "searching"
-                ]
+                $in:
+                    AVAILABLE_JOB_STATUSES
             };
         }
 
+        // ==============================================
+        // CATEGORY
+        // ==============================================
 
-        // Category filter
         if (category) {
             query.category = {
                 $regex:
-                    String(category),
-                $options:
-                    "i"
+                    String(category).trim(),
+                $options: "i"
             };
         }
 
+        // ==============================================
+        // SKILL
+        // ==============================================
 
-        // Skill filter
         if (skill) {
             query.requiredSkill = {
                 $regex:
-                    String(skill),
-                $options:
-                    "i"
+                    String(skill).trim(),
+                $options: "i"
             };
         }
 
+        // ==============================================
+        // URGENCY
+        // ==============================================
 
-        // Urgency filter
         if (urgency) {
+            const allowedUrgencies = [
+                "normal",
+                "urgent"
+            ];
+
+            if (
+                !allowedUrgencies.includes(
+                    normalizeString(
+                        urgency
+                    )
+                )
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid urgency"
+                });
+            }
+
             query.urgency =
-                urgency;
+                normalizeString(
+                    urgency
+                );
         }
 
+        // ==============================================
+        // PRICE FILTERS
+        // ==============================================
 
-        // Price filters
         if (
             minPrice !==
             undefined
         ) {
+            const min =
+                Number(minPrice);
+
+            if (
+                !Number.isFinite(min) ||
+                min < 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid minimum price"
+                });
+            }
+
             query.estimatedMaxPrice = {
-                $gte:
-                    Number(minPrice)
+                $gte: min
             };
         }
 
@@ -630,12 +1025,47 @@ const searchWorkerJobs = async (req, res) => {
             maxPrice !==
             undefined
         ) {
+            const max =
+                Number(maxPrice);
+
+            if (
+                !Number.isFinite(max) ||
+                max < 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Invalid maximum price"
+                });
+            }
+
             query.estimatedMinPrice = {
-                $lte:
-                    Number(maxPrice)
+                $lte: max
             };
         }
 
+        if (
+            minPrice !== undefined &&
+            maxPrice !== undefined
+        ) {
+            const min =
+                Number(minPrice);
+
+            const max =
+                Number(maxPrice);
+
+            if (min > max) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Minimum price cannot be greater than maximum price"
+                });
+            }
+        }
+
+        // ==============================================
+        // FETCH JOBS
+        // ==============================================
 
         const jobs =
             await Job.find(query)
@@ -645,20 +1075,71 @@ const searchWorkerJobs = async (req, res) => {
                 )
                 .sort({
                     createdAt: -1
-                })
-                .limit(
-                    Math.min(
-                        Number(limit) || 20,
-                        50
-                    )
-                );
+                });
 
+        // ==============================================
+        // DISTANCE FILTER
+        // ==============================================
+
+        const filteredJobs =
+            jobs
+                .map(job => {
+
+                    if (
+                        !hasValidCoordinates(
+                            job.location?.latitude,
+                            job.location?.longitude
+                        )
+                    ) {
+                        return null;
+                    }
+
+                    const distance =
+                        calculateDistance(
+                            worker.location.latitude,
+                            worker.location.longitude,
+                            job.location.latitude,
+                            job.location.longitude
+                        );
+
+                    if (
+                        !Number.isFinite(
+                            distance
+                        ) ||
+                        distance >
+                            SERVICE_RADIUS_KM
+                    ) {
+                        return null;
+                    }
+
+                    return {
+                        ...job.toObject(),
+
+                        distance:
+                            Number(
+                                distance.toFixed(2)
+                            )
+                    };
+                })
+                .filter(Boolean)
+                .sort(
+                    (a, b) =>
+                        a.distance -
+                        b.distance
+                )
+                .slice(
+                    0,
+                    safeLimit
+                );
 
         res.status(200).json({
             success: true,
 
             count:
-                jobs.length,
+                filteredJobs.length,
+
+            radius:
+                SERVICE_RADIUS_KM,
 
             filters: {
                 category:
@@ -674,13 +1155,18 @@ const searchWorkerJobs = async (req, res) => {
                     status || null,
 
                 minPrice:
-                    minPrice || null,
+                    minPrice !== undefined
+                        ? Number(minPrice)
+                        : null,
 
                 maxPrice:
-                    maxPrice || null
+                    maxPrice !== undefined
+                        ? Number(maxPrice)
+                        : null
             },
 
-            jobs
+            jobs:
+                filteredJobs
         });
 
     } catch (error) {
@@ -697,7 +1183,6 @@ const searchWorkerJobs = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // EXPORTS
 // ======================================================
@@ -707,7 +1192,6 @@ module.exports = {
     updateMyProfile,
     updateAvailability,
     updateLocation,
-
     getWorkerDashboard,
     getWorkerEarnings,
     searchWorkerJobs

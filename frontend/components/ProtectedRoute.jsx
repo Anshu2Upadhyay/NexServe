@@ -1,14 +1,36 @@
 import React from "react";
 import { Navigate, Outlet } from "react-router-dom";
 
+import { useAuth } from "../context/AuthContext";
+
 function ProtectedRoute({ allowedRole }) {
-    const token =
-        localStorage.getItem("nexserve_token");
 
-    const userData =
-        localStorage.getItem("nexserve_user");
+    const {
+        user,
+        token,
+        loading
+    } = useAuth();
 
-    if (!token || !userData) {
+
+    // ======================================================
+    // WAIT FOR AUTH RESTORATION
+    // ======================================================
+
+    if (loading) {
+        return (
+            <div className="auth-loading">
+                <div className="loading-spinner"></div>
+                <p>Loading...</p>
+            </div>
+        );
+    }
+
+
+    // ======================================================
+    // NOT AUTHENTICATED
+    // ======================================================
+
+    if (!token || !user) {
         return (
             <Navigate
                 to="/login"
@@ -17,32 +39,17 @@ function ProtectedRoute({ allowedRole }) {
         );
     }
 
-    let user;
 
-    try {
-        user = JSON.parse(userData);
-    } catch {
-        localStorage.removeItem(
-            "nexserve_token"
-        );
-
-        localStorage.removeItem(
-            "nexserve_user"
-        );
-
-        return (
-            <Navigate
-                to="/login"
-                replace
-            />
-        );
-    }
+    // ======================================================
+    // ROLE CHECK
+    // ======================================================
 
     if (
         allowedRole &&
-        user?.role !== allowedRole
+        user.role !== allowedRole
     ) {
-        if (user?.role === "worker") {
+
+        if (user.role === "worker") {
             return (
                 <Navigate
                     to="/worker/dashboard"
@@ -51,13 +58,30 @@ function ProtectedRoute({ allowedRole }) {
             );
         }
 
+
+        if (user.role === "customer") {
+            return (
+                <Navigate
+                    to="/customer/home"
+                    replace
+                />
+            );
+        }
+
+
+        // Unknown role
         return (
             <Navigate
-                to="/customer/home"
+                to="/login"
                 replace
             />
         );
     }
+
+
+    // ======================================================
+    // AUTHORIZED
+    // ======================================================
 
     return <Outlet />;
 }

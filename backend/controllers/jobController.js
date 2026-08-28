@@ -21,10 +21,25 @@ const {
     createNotification
 } = require("../services/notificationService");
 
+// ======================================================
+// CONSTANTS
+// ======================================================
+
+const SERVICE_RADIUS_KM = 5;
+
+const AVAILABLE_JOB_STATUSES = [
+    "posted",
+    "searching"
+];
+
+const ACTIVE_JOB_STATUSES = [
+    "accepted",
+    "on_the_way",
+    "in_progress"
+];
 
 // ======================================================
 // SAFE NOTIFICATION HELPER
-// Notification fail hone par main job operation fail nahi hoga
 // ======================================================
 
 const notify = async ({
@@ -48,7 +63,6 @@ const notify = async ({
             message,
             job
         });
-
     } catch (error) {
         console.error(
             "Notification error:",
@@ -57,6 +71,36 @@ const notify = async ({
     }
 };
 
+// ======================================================
+// HELPERS
+// ======================================================
+
+const isValidObjectId = (id) => {
+    return mongoose.Types.ObjectId.isValid(id);
+};
+
+const isValidCoordinates = (
+    latitude,
+    longitude
+) => {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    return (
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180
+    );
+};
+
+const normalize = (value) => {
+    return String(value || "")
+        .trim()
+        .toLowerCase();
+};
 
 // ======================================================
 // CREATE JOB
@@ -94,6 +138,29 @@ const createJob = async (req, res) => {
             });
         }
 
+        const cleanTitle =
+            String(title).trim();
+
+        const cleanDescription =
+            String(description).trim();
+
+        const cleanCity =
+            String(city).trim();
+
+        const cleanArea =
+            String(area).trim();
+
+        if (
+            cleanTitle.length < 3 ||
+            cleanDescription.length < 5
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Please provide valid title and description"
+            });
+        }
+
         if (
             !["instant", "quote"].includes(
                 bookingType
@@ -106,10 +173,12 @@ const createJob = async (req, res) => {
             });
         }
 
+        const finalUrgency =
+            urgency || "normal";
+
         if (
-            urgency &&
             !["normal", "urgent"].includes(
-                urgency
+                finalUrgency
             )
         ) {
             return res.status(400).json({
@@ -123,16 +192,17 @@ const createJob = async (req, res) => {
         const lng = Number(longitude);
 
         if (
-            !Number.isFinite(lat) ||
-            !Number.isFinite(lng)
+            !isValidCoordinates(
+                lat,
+                lng
+            )
         ) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Latitude and longitude must be numbers"
+                    "Invalid latitude or longitude"
             });
         }
-
 
         // ==================================================
         // AI CLASSIFICATION
@@ -143,7 +213,7 @@ const createJob = async (req, res) => {
         try {
             aiPrediction =
                 await predictJobDetails(
-                    description
+                    cleanDescription
                 );
         } catch (error) {
             console.error(
@@ -151,7 +221,6 @@ const createJob = async (req, res) => {
                 error.message
             );
         }
-
 
         const finalCategory =
             aiPrediction?.category ||
@@ -167,7 +236,6 @@ const createJob = async (req, res) => {
             aiPrediction?.difficulty ||
             "Medium";
 
-
         // ==================================================
         // PRICE ESTIMATION
         // ==================================================
@@ -178,7 +246,7 @@ const createJob = async (req, res) => {
         };
 
         try {
-            priceEstimate =
+            const result =
                 calculateEstimatedPrice({
                     category:
                         finalCategory,
@@ -187,8 +255,22 @@ const createJob = async (req, res) => {
                         finalDifficulty,
 
                     urgency:
-                        urgency || "normal"
+                        finalUrgency
                 });
+
+            if (result) {
+                priceEstimate = {
+                    minPrice:
+                        Number(
+                            result.minPrice
+                        ) || 0,
+
+                    maxPrice:
+                        Number(
+                            result.maxPrice
+                        ) || 0
+                };
+            }
         } catch (error) {
             console.error(
                 "Price estimation error:",
@@ -196,33 +278,43 @@ const createJob = async (req, res) => {
             );
         }
 
-
         // ==================================================
         // CREATE JOB
         // ==================================================
 
         const job = await Job.create({
-            customer: req.user.id,
+            customer:
+                req.user.id,
 
-            title,
+            title:
+                cleanTitle,
 
-            description,
+            description:
+                cleanDescription,
 
             category:
-                finalCategory,
+                String(
+                    finalCategory
+                ).trim(),
 
             requiredSkill:
-                finalRequiredSkill,
+                String(
+                    finalRequiredSkill
+                ).trim(),
 
             difficulty:
                 finalDifficulty,
 
             image:
-                image || "",
+                image
+                    ? String(image).trim()
+                    : "",
 
-            city,
+            city:
+                cleanCity,
 
-            area,
+            area:
+                cleanArea,
 
             location: {
                 latitude: lat,
@@ -230,17 +322,18 @@ const createJob = async (req, res) => {
             },
 
             urgency:
-                urgency || "normal",
+                finalUrgency,
 
             bookingType,
 
             estimatedMinPrice:
-                priceEstimate.minPrice || 0,
+                priceEstimate.minPrice,
 
             estimatedMaxPrice:
-                priceEstimate.maxPrice || 0,
+                priceEstimate.maxPrice,
 
-            finalPrice: 0,
+            finalPrice:
+                0,
 
             paymentStatus:
                 "pending",
@@ -255,11 +348,18 @@ const createJob = async (req, res) => {
                 null,
 
             status:
-                "posted"
+                "posted",
+
+            assignedWorker:
+                null,
+
+            otp:
+                null,
+
+            otpVerified:
+                false
         });
 
-
-        // Customer notification
         await notify({
             recipient:
                 req.user.id,
@@ -280,8 +380,7 @@ const createJob = async (req, res) => {
                 job._id
         });
 
-
-        res.status(201).json({
+        return res.status(201).json({
             success: true,
 
             message:
@@ -300,10 +399,10 @@ const createJob = async (req, res) => {
 
             estimatedPrice: {
                 min:
-                    priceEstimate.minPrice || 0,
+                    priceEstimate.minPrice,
 
                 max:
-                    priceEstimate.maxPrice || 0
+                    priceEstimate.maxPrice
             },
 
             job
@@ -315,14 +414,13 @@ const createJob = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while creating job"
         });
     }
 };
-
 
 // ======================================================
 // GET CUSTOMER JOBS
@@ -337,13 +435,13 @@ const getMyJobs = async (req, res) => {
             })
                 .populate(
                     "assignedWorker",
-                    "name phone skills rating completedJobs"
+                    "name phone skills rating completedJobs isAvailable"
                 )
                 .sort({
                     createdAt: -1
                 });
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             count:
                 jobs.length,
@@ -356,7 +454,7 @@ const getMyJobs = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while fetching jobs"
@@ -364,21 +462,21 @@ const getMyJobs = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // GET SINGLE JOB
 // ======================================================
 
-const getJobDetails = async (req, res) => {
+const getJobDetails = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
         } = req.params;
 
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
@@ -397,7 +495,7 @@ const getJobDetails = async (req, res) => {
             })
                 .populate(
                     "assignedWorker",
-                    "name phone skills rating completedJobs"
+                    "name phone skills rating completedJobs isAvailable"
                 )
                 .populate(
                     "customer",
@@ -412,7 +510,7 @@ const getJobDetails = async (req, res) => {
             });
         }
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             job
         });
@@ -423,7 +521,7 @@ const getJobDetails = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while fetching job details"
@@ -431,12 +529,14 @@ const getJobDetails = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // GET AVAILABLE JOBS
 // ======================================================
 
-const getAvailableJobs = async (req, res) => {
+const getAvailableJobs = async (
+    req,
+    res
+) => {
     try {
         const worker =
             await Worker.findById(
@@ -455,7 +555,8 @@ const getAvailableJobs = async (req, res) => {
             return res.status(200).json({
                 success: true,
                 count: 0,
-                radius: 5,
+                radius:
+                    SERVICE_RADIUS_KM,
                 message:
                     "You are currently offline",
                 jobs: []
@@ -463,14 +564,10 @@ const getAvailableJobs = async (req, res) => {
         }
 
         if (
-            worker.location?.latitude ===
-                null ||
-            worker.location?.longitude ===
-                null ||
-            worker.location?.latitude ===
-                undefined ||
-            worker.location?.longitude ===
-                undefined
+            !isValidCoordinates(
+                worker.location?.latitude,
+                worker.location?.longitude
+            )
         ) {
             return res.status(400).json({
                 success: false,
@@ -479,6 +576,47 @@ const getAvailableJobs = async (req, res) => {
             });
         }
 
+        if (
+            !Array.isArray(worker.skills) ||
+            worker.skills.length === 0
+        ) {
+            return res.status(200).json({
+                success: true,
+                count: 0,
+                radius:
+                    SERVICE_RADIUS_KM,
+                message:
+                    "Please add your skills to receive jobs",
+                jobs: []
+            });
+        }
+
+        // Worker already has active job
+        const activeJob =
+            await Job.findOne({
+                assignedWorker:
+                    worker._id,
+
+                status: {
+                    $in:
+                        ACTIVE_JOB_STATUSES
+                }
+            }).select(
+                "_id title status"
+            );
+
+        if (activeJob) {
+            return res.status(200).json({
+                success: true,
+                count: 0,
+                radius:
+                    SERVICE_RADIUS_KM,
+                message:
+                    "You already have an active job",
+                activeJob,
+                jobs: []
+            });
+        }
 
         const jobs =
             await Job.find({
@@ -491,10 +629,8 @@ const getAvailableJobs = async (req, res) => {
                 },
 
                 status: {
-                    $in: [
-                        "posted",
-                        "searching"
-                    ]
+                    $in:
+                        AVAILABLE_JOB_STATUSES
                 },
 
                 assignedWorker:
@@ -508,10 +644,18 @@ const getAvailableJobs = async (req, res) => {
                     createdAt: -1
                 });
 
-
         const nearbyJobs =
             jobs
-                .map((job) => {
+                .map(job => {
+
+                    if (
+                        !isValidCoordinates(
+                            job.location?.latitude,
+                            job.location?.longitude
+                        )
+                    ) {
+                        return null;
+                    }
 
                     const distance =
                         calculateDistance(
@@ -520,6 +664,16 @@ const getAvailableJobs = async (req, res) => {
                             job.location.latitude,
                             job.location.longitude
                         );
+
+                    if (
+                        !Number.isFinite(
+                            distance
+                        ) ||
+                        distance >
+                            SERVICE_RADIUS_KM
+                    ) {
+                        return null;
+                    }
 
                     return {
                         ...job.toObject(),
@@ -530,22 +684,19 @@ const getAvailableJobs = async (req, res) => {
                             )
                     };
                 })
-                .filter(
-                    (job) =>
-                        job.distance <= 5
-                )
+                .filter(Boolean)
                 .sort(
                     (a, b) =>
                         a.distance -
                         b.distance
                 );
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             count:
                 nearbyJobs.length,
-            radius: 5,
+            radius:
+                SERVICE_RADIUS_KM,
             jobs:
                 nearbyJobs
         });
@@ -556,7 +707,7 @@ const getAvailableJobs = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while fetching available jobs"
@@ -564,21 +715,21 @@ const getAvailableJobs = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // ACCEPT JOB
 // ======================================================
 
-const acceptJob = async (req, res) => {
+const acceptJob = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
         } = req.params;
 
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
@@ -609,19 +760,41 @@ const acceptJob = async (req, res) => {
         }
 
         if (
-            worker.location?.latitude ===
-                null ||
-            worker.location?.longitude ===
-                null ||
-            worker.location?.latitude ===
-                undefined ||
-            worker.location?.longitude ===
-                undefined
+            !isValidCoordinates(
+                worker.location?.latitude,
+                worker.location?.longitude
+            )
         ) {
             return res.status(400).json({
                 success: false,
                 message:
                     "Please update your location first"
+            });
+        }
+
+        // ==================================================
+        // ACTIVE JOB PROTECTION
+        // ==================================================
+
+        const activeJob =
+            await Job.findOne({
+                assignedWorker:
+                    worker._id,
+
+                status: {
+                    $in:
+                        ACTIVE_JOB_STATUSES
+                }
+            }).select(
+                "_id title status"
+            );
+
+        if (activeJob) {
+            return res.status(409).json({
+                success: false,
+                message:
+                    "You already have an active job",
+                activeJob
             });
         }
 
@@ -638,7 +811,9 @@ const acceptJob = async (req, res) => {
             });
         }
 
-        if (job.assignedWorker) {
+        if (
+            job.assignedWorker
+        ) {
             return res.status(409).json({
                 success: false,
                 message:
@@ -647,10 +822,7 @@ const acceptJob = async (req, res) => {
         }
 
         if (
-            ![
-                "posted",
-                "searching"
-            ].includes(
+            !AVAILABLE_JOB_STATUSES.includes(
                 job.status
             )
         ) {
@@ -662,12 +834,8 @@ const acceptJob = async (req, res) => {
         }
 
         if (
-            job.city
-                .trim()
-                .toLowerCase() !==
-            worker.city
-                .trim()
-                .toLowerCase()
+            normalize(job.city) !==
+            normalize(worker.city)
         ) {
             return res.status(403).json({
                 success: false,
@@ -676,16 +844,16 @@ const acceptJob = async (req, res) => {
             });
         }
 
-
         const hasRequiredSkill =
+            Array.isArray(
+                worker.skills
+            ) &&
             worker.skills.some(
-                (skill) =>
-                    skill
-                        .trim()
-                        .toLowerCase() ===
-                    job.requiredSkill
-                        .trim()
-                        .toLowerCase()
+                skill =>
+                    normalize(skill) ===
+                    normalize(
+                        job.requiredSkill
+                    )
             );
 
         if (!hasRequiredSkill) {
@@ -696,6 +864,18 @@ const acceptJob = async (req, res) => {
             });
         }
 
+        if (
+            !isValidCoordinates(
+                job.location?.latitude,
+                job.location?.longitude
+            )
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Job location is invalid"
+            });
+        }
 
         const distance =
             calculateDistance(
@@ -705,7 +885,20 @@ const acceptJob = async (req, res) => {
                 job.location.longitude
             );
 
-        if (distance > 5) {
+        if (
+            !Number.isFinite(distance)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Unable to calculate job distance"
+            });
+        }
+
+        if (
+            distance >
+            SERVICE_RADIUS_KM
+        ) {
             return res.status(403).json({
                 success: false,
                 message:
@@ -713,6 +906,10 @@ const acceptJob = async (req, res) => {
             });
         }
 
+        // ==================================================
+        // ATOMIC JOB ASSIGNMENT
+        // Prevents two workers accepting same job
+        // ==================================================
 
         const updatedJob =
             await Job.findOneAndUpdate(
@@ -724,10 +921,8 @@ const acceptJob = async (req, res) => {
                         null,
 
                     status: {
-                        $in: [
-                            "posted",
-                            "searching"
-                        ]
+                        $in:
+                            AVAILABLE_JOB_STATUSES
                     }
                 },
 
@@ -742,8 +937,7 @@ const acceptJob = async (req, res) => {
                 },
 
                 {
-                    new:
-                        true
+                    new: true
                 }
             )
                 .populate(
@@ -752,9 +946,8 @@ const acceptJob = async (req, res) => {
                 )
                 .populate(
                     "assignedWorker",
-                    "name phone skills rating completedJobs"
+                    "name phone skills rating completedJobs isAvailable"
                 );
-
 
         if (!updatedJob) {
             return res.status(409).json({
@@ -764,14 +957,28 @@ const acceptJob = async (req, res) => {
             });
         }
 
+        // ==================================================
+        // WORKER COUNTER
+        // ==================================================
 
-        worker.acceptedJobs =
-            (worker.acceptedJobs || 0) + 1;
+        await Worker.findByIdAndUpdate(
+            worker._id,
+            {
+                $inc: {
+                    acceptedJobs: 1
+                },
 
-        await worker.save();
+                $set: {
+                    isAvailable:
+                        false
+                }
+            }
+        );
 
+        // ==================================================
+        // CUSTOMER NOTIFICATION
+        // ==================================================
 
-        // Customer notification
         await notify({
             recipient:
                 updatedJob.customer?._id ||
@@ -793,8 +1000,7 @@ const acceptJob = async (req, res) => {
                 updatedJob._id
         });
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
 
             message:
@@ -815,7 +1021,7 @@ const acceptJob = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while accepting job"
@@ -823,21 +1029,21 @@ const acceptJob = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // START TRAVEL
 // ======================================================
 
-const startTravel = async (req, res) => {
+const startTravel = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
         } = req.params;
 
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
@@ -879,12 +1085,13 @@ const startTravel = async (req, res) => {
             });
         }
 
-
         const otp =
-            generateOTP();
+            String(
+                generateOTP()
+            );
 
         job.otp =
-            String(otp);
+            otp;
 
         job.otpVerified =
             false;
@@ -894,8 +1101,6 @@ const startTravel = async (req, res) => {
 
         await job.save();
 
-
-        // Customer notification
         await notify({
             recipient:
                 job.customer,
@@ -916,8 +1121,7 @@ const startTravel = async (req, res) => {
                 job._id
         });
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
 
             message:
@@ -938,7 +1142,7 @@ const startTravel = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while starting travel"
@@ -946,26 +1150,42 @@ const startTravel = async (req, res) => {
     }
 };
 
-
 // ======================================================
-// VERIFY OTP
+// VERIFY JOB OTP
 // ======================================================
 
-const verifyJobOTP = async (req, res) => {
+const verifyJobOTP = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
         } = req.params;
 
+        const {
+            otp
+        } = req.body || {};
+
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
                 message:
                     "Invalid job ID"
+            });
+        }
+
+        if (
+            otp === undefined ||
+            otp === null ||
+            String(otp).trim() === ""
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "OTP is required"
             });
         }
 
@@ -1002,21 +1222,19 @@ const verifyJobOTP = async (req, res) => {
             });
         }
 
-        const {
-            otp
-        } = req.body || {};
-
-        if (!otp) {
+        if (
+            !job.otp
+        ) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "OTP is required"
+                    "OTP is no longer valid"
             });
         }
 
         if (
             String(job.otp) !==
-            String(otp)
+            String(otp).trim()
         ) {
             return res.status(400).json({
                 success: false,
@@ -1036,8 +1254,6 @@ const verifyJobOTP = async (req, res) => {
 
         await job.save();
 
-
-        // Customer notification
         await notify({
             recipient:
                 job.customer,
@@ -1058,8 +1274,7 @@ const verifyJobOTP = async (req, res) => {
                 job._id
         });
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
 
             message:
@@ -1078,7 +1293,7 @@ const verifyJobOTP = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while verifying OTP"
@@ -1086,12 +1301,14 @@ const verifyJobOTP = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // SET FINAL PRICE
 // ======================================================
 
-const setFinalPrice = async (req, res) => {
+const setFinalPrice = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
@@ -1102,9 +1319,7 @@ const setFinalPrice = async (req, res) => {
         } = req.body || {};
 
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
@@ -1156,7 +1371,18 @@ const setFinalPrice = async (req, res) => {
         }
 
         if (
-            job.finalPrice > 0
+            job.paymentStatus ===
+            "paid"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Payment has already been completed"
+            });
+        }
+
+        if (
+            Number(job.finalPrice) > 0
         ) {
             return res.status(400).json({
                 success: false,
@@ -1166,15 +1392,15 @@ const setFinalPrice = async (req, res) => {
         }
 
         job.finalPrice =
-            price;
+            Number(
+                price.toFixed(2)
+            );
 
         job.paymentStatus =
             "pending";
 
         await job.save();
 
-
-        // Customer notification
         await notify({
             recipient:
                 job.customer,
@@ -1195,8 +1421,7 @@ const setFinalPrice = async (req, res) => {
                 job._id
         });
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
 
             message:
@@ -1218,7 +1443,7 @@ const setFinalPrice = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while setting final price"
@@ -1226,21 +1451,21 @@ const setFinalPrice = async (req, res) => {
     }
 };
 
-
 // ======================================================
-// FAKE PAYMENT
+// MOCK PAYMENT
 // ======================================================
 
-const makePayment = async (req, res) => {
+const makePayment = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
         } = req.params;
 
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
@@ -1279,7 +1504,7 @@ const makePayment = async (req, res) => {
 
         if (
             !job.finalPrice ||
-            job.finalPrice <= 0
+            Number(job.finalPrice) <= 0
         ) {
             return res.status(400).json({
                 success: false,
@@ -1302,11 +1527,6 @@ const makePayment = async (req, res) => {
             });
         }
 
-
-        // ==================================================
-        // MOCK PAYMENT
-        // ==================================================
-
         const transactionId =
             `MOCK_${Date.now()}_${Math.floor(
                 Math.random() * 100000
@@ -1326,8 +1546,6 @@ const makePayment = async (req, res) => {
 
         await job.save();
 
-
-        // Worker notification
         await notify({
             recipient:
                 job.assignedWorker,
@@ -1348,8 +1566,7 @@ const makePayment = async (req, res) => {
                 job._id
         });
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
 
             message:
@@ -1382,7 +1599,7 @@ const makePayment = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while processing payment"
@@ -1390,21 +1607,21 @@ const makePayment = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // COMPLETE JOB
 // ======================================================
 
-const completeJob = async (req, res) => {
+const completeJob = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
         } = req.params;
 
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
@@ -1448,7 +1665,7 @@ const completeJob = async (req, res) => {
 
         if (
             !job.finalPrice ||
-            job.finalPrice <= 0
+            Number(job.finalPrice) <= 0
         ) {
             return res.status(400).json({
                 success: false,
@@ -1473,14 +1690,20 @@ const completeJob = async (req, res) => {
 
         await job.save();
 
+        await Worker.findByIdAndUpdate(
+            worker._id,
+            {
+                $inc: {
+                    completedJobs: 1
+                },
 
-        worker.completedJobs =
-            (worker.completedJobs || 0) + 1;
+                $set: {
+                    isAvailable:
+                        false
+                }
+            }
+        );
 
-        await worker.save();
-
-
-        // Customer notification
         await notify({
             recipient:
                 job.customer,
@@ -1501,7 +1724,6 @@ const completeJob = async (req, res) => {
                 job._id
         });
 
-
         const completedJob =
             await Job.findById(
                 job._id
@@ -1512,11 +1734,10 @@ const completeJob = async (req, res) => {
                 )
                 .populate(
                     "assignedWorker",
-                    "name phone skills rating completedJobs"
+                    "name phone skills rating completedJobs isAvailable"
                 );
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
 
             message:
@@ -1532,7 +1753,7 @@ const completeJob = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while completing job"
@@ -1540,12 +1761,14 @@ const completeJob = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // RATE WORKER
 // ======================================================
 
-const rateWorker = async (req, res) => {
+const rateWorker = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
@@ -1557,9 +1780,7 @@ const rateWorker = async (req, res) => {
         } = req.body || {};
 
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
@@ -1613,7 +1834,9 @@ const rateWorker = async (req, res) => {
             });
         }
 
-        if (!job.assignedWorker) {
+        if (
+            !job.assignedWorker
+        ) {
             return res.status(400).json({
                 success: false,
                 message:
@@ -1645,22 +1868,25 @@ const rateWorker = async (req, res) => {
             });
         }
 
-
-        const oldCompletedJobs =
+        // completedJobs includes this completed job.
+        // Previous completed count is therefore -1.
+        const previousCompletedJobs =
             Math.max(
-                (worker.completedJobs || 0) - 1,
+                Number(
+                    worker.completedJobs || 0
+                ) - 1,
                 0
             );
 
         const oldRating =
             Number(
-                worker.rating
-            ) || 0;
+                worker.rating || 0
+            );
 
         let newRating;
 
         if (
-            oldCompletedJobs === 0
+            previousCompletedJobs === 0
         ) {
             newRating =
                 numericRating;
@@ -1669,29 +1895,29 @@ const rateWorker = async (req, res) => {
                 (
                     (
                         oldRating *
-                        oldCompletedJobs
+                        previousCompletedJobs
                     ) +
                     numericRating
                 ) /
                 (
-                    oldCompletedJobs + 1
+                    previousCompletedJobs + 1
                 );
         }
-
 
         job.rating =
             numericRating;
 
         job.review =
             typeof review === "string"
-                ? review.trim()
+                ? review
+                    .trim()
+                    .slice(0, 1000)
                 : "";
 
         job.ratedAt =
             new Date();
 
         await job.save();
-
 
         worker.rating =
             Number(
@@ -1700,8 +1926,7 @@ const rateWorker = async (req, res) => {
 
         await worker.save();
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
 
             message:
@@ -1731,7 +1956,7 @@ const rateWorker = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while rating worker"
@@ -1739,13 +1964,15 @@ const rateWorker = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // CANCEL JOB
 // CUSTOMER + WORKER
 // ======================================================
 
-const cancelJob = async (req, res) => {
+const cancelJob = async (
+    req,
+    res
+) => {
     try {
         const {
             jobId
@@ -1756,9 +1983,7 @@ const cancelJob = async (req, res) => {
         } = req.body || {};
 
         if (
-            !mongoose.Types.ObjectId.isValid(
-                jobId
-            )
+            !isValidObjectId(jobId)
         ) {
             return res.status(400).json({
                 success: false,
@@ -1780,12 +2005,15 @@ const cancelJob = async (req, res) => {
             });
         }
 
-
         const currentUser =
-            String(req.user.id);
+            String(
+                req.user.id
+            );
 
         const customerId =
-            String(job.customer);
+            String(
+                job.customer
+            );
 
         const workerId =
             job.assignedWorker
@@ -1794,9 +2022,7 @@ const cancelJob = async (req, res) => {
                 )
                 : null;
 
-
         let cancelledBy;
-
 
         if (
             currentUser ===
@@ -1820,7 +2046,6 @@ const cancelJob = async (req, res) => {
             });
         }
 
-
         if (
             job.status ===
             "completed"
@@ -1831,7 +2056,6 @@ const cancelJob = async (req, res) => {
                     "Completed job cannot be cancelled"
             });
         }
-
 
         if (
             job.status ===
@@ -1844,7 +2068,6 @@ const cancelJob = async (req, res) => {
             });
         }
 
-
         if (
             job.paymentStatus ===
             "paid"
@@ -1856,13 +2079,14 @@ const cancelJob = async (req, res) => {
             });
         }
 
-
         job.status =
             "cancelled";
 
         job.cancellationReason =
             reason
-                ? String(reason).trim()
+                ? String(reason)
+                    .trim()
+                    .slice(0, 500)
                 : "No reason provided";
 
         job.cancelledBy =
@@ -1871,12 +2095,35 @@ const cancelJob = async (req, res) => {
         job.cancelledAt =
             new Date();
 
+        // OTP must never remain usable.
+        job.otp =
+            null;
+
+        job.otpVerified =
+            false;
+
         await job.save();
 
+        // ==================================================
+        // RELEASE WORKER
+        // ==================================================
+
+        if (
+            job.assignedWorker
+        ) {
+            await Worker.findByIdAndUpdate(
+                job.assignedWorker,
+                {
+                    $set: {
+                        isAvailable:
+                            true
+                    }
+                }
+            );
+        }
 
         // ==================================================
         // WORKER CANCELS
-        // CUSTOMER NOTIFICATION
         // ==================================================
 
         if (
@@ -1904,15 +2151,13 @@ const cancelJob = async (req, res) => {
             });
         }
 
-
         // ==================================================
         // CUSTOMER CANCELS
-        // WORKER NOTIFICATION
         // ==================================================
 
         if (
             cancelledBy ===
-            "customer" &&
+                "customer" &&
             job.assignedWorker
         ) {
             await notify({
@@ -1936,25 +2181,6 @@ const cancelJob = async (req, res) => {
             });
         }
 
-
-        // Worker becomes available again
-        if (
-            job.assignedWorker
-        ) {
-            const worker =
-                await Worker.findById(
-                    job.assignedWorker
-                );
-
-            if (worker) {
-                worker.isAvailable =
-                    true;
-
-                await worker.save();
-            }
-        }
-
-
         const cancelledJob =
             await Job.findById(
                 job._id
@@ -1965,11 +2191,10 @@ const cancelJob = async (req, res) => {
                 )
                 .populate(
                     "assignedWorker",
-                    "name phone skills rating completedJobs"
+                    "name phone skills rating completedJobs isAvailable"
                 );
 
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
 
             message:
@@ -1987,14 +2212,13 @@ const cancelJob = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message:
                 "Server error while cancelling job"
         });
     }
 };
-
 
 // ======================================================
 // EXPORTS

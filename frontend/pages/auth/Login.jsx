@@ -1,29 +1,38 @@
-import React, { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+
 import { useAuth } from "../../context/AuthContext";
 
-function Login() {
+const Login = () => {
     const navigate = useNavigate();
-    const location = useLocation();
-    const { login } = useAuth();
 
-    const [role, setRole] = useState(
-        location.state?.role || "customer"
-    );
+    const {
+        login,
+        loading
+    } = useAuth();
 
-    const [form, setForm] = useState({
+    const [formData, setFormData] = useState({
         email: "",
-        password: ""
+        password: "",
+        role: "customer"
     });
 
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
     const handleChange = (e) => {
-        setForm({
-            ...form,
-            [e.target.name]: e.target.value
-        });
+        const {
+            name,
+            value
+        } = e.target;
+
+        setFormData((prev) => ({
+            ...prev,
+            [name]: value
+        }));
+
+        if (error) {
+            setError("");
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -31,84 +40,81 @@ function Login() {
 
         setError("");
 
-        if (!form.email || !form.password) {
-            setError("Please enter email and password.");
+        const email =
+            formData.email.trim();
+
+        const password =
+            formData.password;
+
+        if (!email || !password) {
+            setError(
+                "Email aur password required hai."
+            );
             return;
         }
 
         try {
-            setLoading(true);
-
-            const response = await login(
-                form.email.trim().toLowerCase(),
-                form.password,
-                role
+            const result = await login(
+                email,
+                password,
+                formData.role
             );
 
-            const loggedInUser = response.user;
-
-            if (loggedInUser?.role === "worker") {
-                navigate("/worker", {
-                    replace: true
-                });
-            } else {
-                navigate("/customer/home", {
-                    replace: true
-                });
+            if (!result?.success) {
+                setError(
+                    result?.message ||
+                    "Login failed. Please try again."
+                );
+                return;
             }
+
+            const user =
+                result.user ||
+                result.worker ||
+                result.customer;
+
+            const role =
+                result.role ||
+                user?.role ||
+                formData.role;
+
+            if (role === "worker") {
+                navigate(
+                    "/worker/dashboard",
+                    { replace: true }
+                );
+            } else {
+                navigate(
+                    "/customer/home",
+                    { replace: true }
+                );
+            }
+
         } catch (err) {
-            setError(
-                err?.message ||
-                    "Unable to login. Please try again."
+            console.error(
+                "Login error:",
+                err
             );
-        } finally {
-            setLoading(false);
+
+            setError(
+                err?.response?.data?.message ||
+                err?.message ||
+                "Unable to login. Please try again."
+            );
         }
     };
 
     return (
         <div className="auth-page">
-            <div className="auth-card">
-                <div className="auth-header">
-                    <div className="auth-logo">N</div>
 
-                    <h1>Welcome to NexServe</h1>
+            <div className="auth-card">
+
+                <div className="auth-header">
+                    <h1>NexServe</h1>
 
                     <p>
-                        Login to continue to your account
+                        Login to your account
                     </p>
-                </div>
-
-                <div className="role-selector">
-                    <button
-                        type="button"
-                        className={
-                            role === "customer"
-                                ? "role-option active"
-                                : "role-option"
-                        }
-                        onClick={() => {
-                            setRole("customer");
-                            setError("");
-                        }}
-                    >
-                        Customer
-                    </button>
-
-                    <button
-                        type="button"
-                        className={
-                            role === "worker"
-                                ? "role-option active"
-                                : "role-option"
-                        }
-                        onClick={() => {
-                            setRole("worker");
-                            setError("");
-                        }}
-                    >
-                        Worker
-                    </button>
                 </div>
 
                 {error && (
@@ -118,9 +124,10 @@ function Login() {
                 )}
 
                 <form
-                    className="auth-form"
                     onSubmit={handleSubmit}
+                    className="auth-form"
                 >
+
                     <div className="form-group">
                         <label htmlFor="email">
                             Email
@@ -130,12 +137,18 @@ function Login() {
                             id="email"
                             name="email"
                             type="email"
+                            value={
+                                formData.email
+                            }
+                            onChange={
+                                handleChange
+                            }
                             placeholder="Enter your email"
-                            value={form.email}
-                            onChange={handleChange}
                             autoComplete="email"
+                            required
                         />
                     </div>
+
 
                     <div className="form-group">
                         <label htmlFor="password">
@@ -146,47 +159,96 @@ function Login() {
                             id="password"
                             name="password"
                             type="password"
+                            value={
+                                formData.password
+                            }
+                            onChange={
+                                handleChange
+                            }
                             placeholder="Enter your password"
-                            value={form.password}
-                            onChange={handleChange}
                             autoComplete="current-password"
+                            required
                         />
                     </div>
 
+
+                    <div className="form-group">
+                        <label>
+                            Login as
+                        </label>
+
+                        <div className="role-selector">
+
+                            <label className="role-option">
+                                <input
+                                    type="radio"
+                                    name="role"
+                                    value="customer"
+                                    checked={
+                                        formData.role ===
+                                        "customer"
+                                    }
+                                    onChange={
+                                        handleChange
+                                    }
+                                />
+
+                                <span>
+                                    Customer
+                                </span>
+                            </label>
+
+
+                            <label className="role-option">
+                                <input
+                                    type="radio"
+                                    name="role"
+                                    value="worker"
+                                    checked={
+                                        formData.role ===
+                                        "worker"
+                                    }
+                                    onChange={
+                                        handleChange
+                                    }
+                                />
+
+                                <span>
+                                    Worker
+                                </span>
+                            </label>
+
+                        </div>
+                    </div>
+
+
                     <button
                         type="submit"
-                        className="auth-submit"
+                        className="auth-button"
                         disabled={loading}
                     >
                         {loading
                             ? "Logging in..."
-                            : `Login as ${
-                                  role === "worker"
-                                      ? "Worker"
-                                      : "Customer"
-                              }`}
+                            : "Login"}
                     </button>
+
                 </form>
+
 
                 <div className="auth-footer">
                     <span>
                         Don't have an account?
                     </span>
 
-                    <button
-                        type="button"
-                        onClick={() =>
-                            navigate("/register", {
-                                state: { role }
-                            })
-                        }
-                    >
+                    <Link to="/register">
                         Create account
-                    </button>
+                    </Link>
                 </div>
+
             </div>
+
         </div>
     );
-}
+};
 
 export default Login;

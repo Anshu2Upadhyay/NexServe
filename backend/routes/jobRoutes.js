@@ -16,6 +16,10 @@ const {
 } = require("../controllers/jobController");
 
 const {
+    getWorkerJobDetails
+} = require("../controllers/workerJobController");
+
+const {
     protect,
     authorize
 } = require("../middleware/authMiddleware");
@@ -27,7 +31,7 @@ const router = express.Router();
 // CUSTOMER ROUTES
 // ======================================================
 
-// Create job
+// Create a new job
 router.post(
     "/",
     protect,
@@ -36,7 +40,7 @@ router.post(
 );
 
 
-// Customer's jobs
+// Get logged-in customer's jobs
 router.get(
     "/my-jobs",
     protect,
@@ -45,7 +49,34 @@ router.get(
 );
 
 
-// Single job details
+// ======================================================
+// WORKER ROUTES
+// ======================================================
+
+// Get available jobs for worker
+router.get(
+    "/available",
+    protect,
+    authorize("worker"),
+    getAvailableJobs
+);
+
+
+// Get worker-specific job details
+// IMPORTANT:
+// Keep this before /:jobId
+router.get(
+    "/worker/:jobId",
+    protect,
+    authorize("worker"),
+    getWorkerJobDetails
+);
+
+
+// ======================================================
+// CUSTOMER SINGLE JOB DETAILS
+// ======================================================
+
 router.get(
     "/:jobId",
     protect,
@@ -55,17 +86,8 @@ router.get(
 
 
 // ======================================================
-// WORKER ROUTES
+// WORKER JOB ACTIONS
 // ======================================================
-
-// Available nearby jobs
-router.get(
-    "/available",
-    protect,
-    authorize("worker"),
-    getAvailableJobs
-);
-
 
 // Accept job
 router.patch(
@@ -76,7 +98,7 @@ router.patch(
 );
 
 
-// Worker starts travelling
+// Worker starts travelling to customer
 router.patch(
     "/:jobId/on-the-way",
     protect,
@@ -85,7 +107,7 @@ router.patch(
 );
 
 
-// Verify customer OTP
+// Verify customer's OTP
 router.patch(
     "/:jobId/verify-otp",
     protect,
@@ -94,7 +116,7 @@ router.patch(
 );
 
 
-// Set final price
+// Set final price after inspecting the work
 router.patch(
     "/:jobId/final-price",
     protect,
@@ -113,11 +135,10 @@ router.patch(
 
 
 // ======================================================
-// PAYMENT ROUTE
-// MINI PROJECT = FAKE PAYMENT
+// CUSTOMER PAYMENT
+// MINI PROJECT = MOCK PAYMENT
 // ======================================================
 
-// Customer makes mock payment
 router.patch(
     "/:jobId/payment",
     protect,
@@ -127,10 +148,9 @@ router.patch(
 
 
 // ======================================================
-// RATING ROUTE
+// CUSTOMER RATING
 // ======================================================
 
-// Customer rates worker
 router.patch(
     "/:jobId/rate",
     protect,
@@ -140,10 +160,10 @@ router.patch(
 
 
 // ======================================================
-// CANCELLATION
+// JOB CANCELLATION
 // ======================================================
 
-// Customer can cancel
+// Customer cancels job
 router.patch(
     "/:jobId/cancel",
     protect,
@@ -152,7 +172,7 @@ router.patch(
 );
 
 
-// Worker can cancel
+// Worker cancels job
 router.patch(
     "/:jobId/worker-cancel",
     protect,
@@ -160,5 +180,9 @@ router.patch(
     cancelJob
 );
 
+
+// ======================================================
+// EXPORT ROUTER
+// ======================================================
 
 module.exports = router;
