@@ -27,7 +27,7 @@ const request = async (endpoint, options = {}) => {
     }
   );
 
-  let data = {};
+  let data;
 
   try {
     data = await response.json();

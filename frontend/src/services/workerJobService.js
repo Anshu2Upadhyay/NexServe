@@ -37,7 +37,7 @@ const request = async (
     }
   );
 
-  let data = {};
+  let data;
 
   try {
     data = await response.json();

@@ -712,6 +712,8 @@ export const AuthProvider = ({
 // USE AUTH
 // =====================================================
 
+// The context and hook intentionally live together so consumers import one module.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context =
     useContext(

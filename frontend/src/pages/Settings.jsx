@@ -71,6 +71,8 @@ const Settings = () => {
   useEffect(() => {
     if (!user) return;
 
+    // User data is an external context source that must hydrate this editable form.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProfile({
       name: user.name || "",
       email: user.email || "",

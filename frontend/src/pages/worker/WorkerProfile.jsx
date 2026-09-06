@@ -164,6 +164,8 @@ const WorkerProfile = () => {
   };
 
   useEffect(() => {
+    // Load remote profile data when the user changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProfile();
   }, [user?.id]);
 

@@ -6,7 +6,6 @@ import {
   MapPin,
   Phone,
   Search,
-  User,
 } from "lucide-react";
 
 import {
@@ -78,6 +77,8 @@ const JobDetails = () => {
   };
 
   useEffect(() => {
+    // Load remote job data when the route changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadJob();
   }, [id]);
 

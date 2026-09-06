@@ -122,6 +122,8 @@ const WorkerEarnings = () => {
     // =====================================================
 
     useEffect(() => {
+        // Load remote earnings when the page mounts.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadEarnings();
     }, [loadEarnings]);
 

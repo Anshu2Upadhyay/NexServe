@@ -5,7 +5,6 @@ import {
   IndianRupee,
   MapPin,
   Phone,
-  UserRound,
 } from "lucide-react";
 
 import {

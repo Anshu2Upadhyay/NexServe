@@ -86,7 +86,7 @@ const WorkerDashboard = () => {
                 }
             );
 
-            let data = {};
+            let data;
 
             try {
                 data = await response.json();
@@ -151,63 +151,13 @@ const WorkerDashboard = () => {
         ]);
 
     // =====================================================
-    // SILENT DASHBOARD REFRESH
-    // Does NOT reset dashboard/loading UI
-    // =====================================================
-
-    const refreshDashboardSilently =
-        useCallback(async () => {
-            try {
-                const results =
-                    await Promise.allSettled([
-                        apiRequest(
-                            "/workers/dashboard"
-                        ),
-                        apiRequest(
-                            "/workers/earnings"
-                        ),
-                    ]);
-
-                const dashboardResult =
-                    results[0];
-
-                const earningsResult =
-                    results[1];
-
-                if (
-                    dashboardResult.status ===
-                    "fulfilled"
-                ) {
-                    setDashboard(
-                        dashboardResult.value
-                            ?.dashboard || null
-                    );
-                }
-
-                if (
-                    earningsResult.status ===
-                    "fulfilled"
-                ) {
-                    setEarningsData(
-                        earningsResult.value
-                            ?.earnings || null
-                    );
-                }
-            } catch (err) {
-                console.error(
-                    "Silent dashboard refresh error:",
-                    err
-                );
-            }
-        }, [apiRequest]);
-
-    // =====================================================
     // LOAD DASHBOARD + EARNINGS
     // =====================================================
 
     const loadData = useCallback(
         async (isRefresh = false) => {
             if (!token) {
+                // No request is made when unauthenticated.
                 setLoading(false);
 
                 setError(
@@ -306,6 +256,8 @@ const WorkerDashboard = () => {
 
     useEffect(() => {
         if (!token) {
+            // There is no request to wait for when unauthenticated.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLoading(false);
             return;
         }

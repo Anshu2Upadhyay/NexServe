@@ -87,6 +87,8 @@ const MyJobs = () => {
   );
 
   useEffect(() => {
+    // Load remote jobs when the page mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadJobs();
   }, [loadJobs]);
 

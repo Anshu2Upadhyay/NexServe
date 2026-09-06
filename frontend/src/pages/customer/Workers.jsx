@@ -147,6 +147,8 @@ const Workers = () => {
     };
 
   useEffect(() => {
+    // Load remote workers when the filter changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWorkers();
   }, [category]);
 

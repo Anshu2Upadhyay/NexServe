@@ -6,7 +6,6 @@ import {
   Info,
   MapPin,
   Trash2,
-  XCircle,
 } from "lucide-react";
 import { useState } from "react";
 
