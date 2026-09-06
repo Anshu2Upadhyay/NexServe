@@ -3,6 +3,7 @@ const express = require("express");
 const {
     createJob,
     getMyJobs,
+    getMyWorkerJobs,
     getJobDetails,
     getAvailableJobs,
     acceptJob,
@@ -59,6 +60,15 @@ router.get(
     protect,
     authorize("worker"),
     getAvailableJobs
+);
+
+
+// Get logged-in worker's assigned jobs
+router.get(
+    "/worker/my-jobs",
+    protect,
+    authorize("worker"),
+    getMyWorkerJobs
 );
 
 

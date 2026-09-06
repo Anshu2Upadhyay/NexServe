@@ -1,5 +1,31 @@
 const mongoose = require("mongoose");
 
+const locationSchema = new mongoose.Schema(
+    {
+        latitude: {
+            type: Number,
+            min: -90,
+            max: 90,
+            default: null
+        },
+
+        longitude: {
+            type: Number,
+            min: -180,
+            max: 180,
+            default: null
+        },
+
+        updatedAt: {
+            type: Date,
+            default: null
+        }
+    },
+    {
+        _id: false
+    }
+);
+
 const workerSchema = new mongoose.Schema(
     {
         name: {
@@ -19,22 +45,36 @@ const workerSchema = new mongoose.Schema(
         phone: {
             type: String,
             required: true,
-            unique: true,
             trim: true
         },
 
         password: {
             type: String,
-            required: true,
-            minlength: 6
+            required: true
         },
 
+        /*
+         * IMPORTANT:
+         * city = registered district.
+         *
+         * District can be changed ONLY ONCE.
+         * After first district change:
+         * districtChangeUsed = true
+         */
         city: {
             type: String,
             required: true,
             trim: true
         },
 
+        districtChangeUsed: {
+            type: Boolean,
+            default: false
+        },
+
+        /*
+         * Area/address is freely editable.
+         */
         area: {
             type: String,
             required: true,
@@ -43,7 +83,7 @@ const workerSchema = new mongoose.Schema(
 
         skills: {
             type: [String],
-            required: true
+            default: []
         },
 
         experience: {
@@ -52,26 +92,24 @@ const workerSchema = new mongoose.Schema(
             min: 0
         },
 
+        /*
+         * Current GPS location.
+         *
+         * This is NOT used to change district.
+         * It is only used for actual distance matching.
+         */
+        location: {
+            type: locationSchema,
+            default: () => ({
+                latitude: null,
+                longitude: null,
+                updatedAt: null
+            })
+        },
+
         isAvailable: {
             type: Boolean,
             default: false
-        },
-
-        location: {
-            latitude: {
-                type: Number,
-                default: null
-            },
-
-            longitude: {
-                type: Number,
-                default: null
-            }
-        },
-
-        profileImage: {
-            type: String,
-            default: ""
         },
 
         rating: {
@@ -81,20 +119,16 @@ const workerSchema = new mongoose.Schema(
             max: 5
         },
 
-        completedJobs: {
-            type: Number,
-            default: 0
-        },
-
         acceptedJobs: {
             type: Number,
-            default: 0
+            default: 0,
+            min: 0
         },
 
-        role: {
-            type: String,
-            default: "worker",
-            enum: ["worker"]
+        completedJobs: {
+            type: Number,
+            default: 0,
+            min: 0
         }
     },
     {
@@ -102,4 +136,5 @@ const workerSchema = new mongoose.Schema(
     }
 );
 
-module.exports = mongoose.model("Worker", workerSchema);
+module.exports =
+    mongoose.model("Worker", workerSchema);

@@ -15,26 +15,20 @@ MODEL_DIR = os.path.join(
 )
 
 
-category_model = joblib.load(
-    os.path.join(
-        MODEL_DIR,
-        "category_model.pkl"
-    )
-)
+def load_model(filename):
+    path = os.path.join(MODEL_DIR, filename)
 
-skill_model = joblib.load(
-    os.path.join(
-        MODEL_DIR,
-        "skill_model.pkl"
-    )
-)
+    if not os.path.isfile(path):
+        raise RuntimeError(
+            f"Missing AI model: {filename}. Run train_model.py first."
+        )
 
-difficulty_model = joblib.load(
-    os.path.join(
-        MODEL_DIR,
-        "difficulty_model.pkl"
-    )
-)
+    return joblib.load(path)
+
+
+category_model = load_model("category_model.pkl")
+skill_model = load_model("skill_model.pkl")
+difficulty_model = load_model("difficulty_model.pkl")
 
 
 @app.route("/", methods=["GET"])
@@ -48,7 +42,7 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
 
         if not data:
             return jsonify({
@@ -58,7 +52,7 @@ def predict():
 
         description = data.get("description")
 
-        if not description:
+        if not isinstance(description, str) or not description.strip():
             return jsonify({
                 "success": False,
                 "message": "Job description is required"
@@ -105,6 +99,6 @@ def predict():
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
-        port=8000,
-        debug=True
+        port=int(os.environ.get("PORT", 8000)),
+        debug=os.environ.get("FLASK_DEBUG") == "1"
     )

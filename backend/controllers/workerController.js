@@ -1,26 +1,29 @@
 const Worker = require("../models/Worker");
 const Job = require("../models/Job");
 
+
 // ======================================================
 // CONSTANTS
 // ======================================================
 
 const SERVICE_RADIUS_KM = 5;
 
-const ACTIVE_JOB_STATUSES = [
-    "accepted",
-    "on_the_way",
-    "in_progress"
-];
-
 const AVAILABLE_JOB_STATUSES = [
     "posted",
     "searching"
 ];
 
+
 // ======================================================
 // HELPERS
 // ======================================================
+
+const normalize = (value) => {
+    return String(value || "")
+        .trim()
+        .toLowerCase();
+};
+
 
 const hasValidCoordinates = (latitude, longitude) => {
     const lat = Number(latitude);
@@ -36,39 +39,63 @@ const hasValidCoordinates = (latitude, longitude) => {
     );
 };
 
-const normalizeString = (value) => {
-    return String(value || "").trim().toLowerCase();
+
+const getWorkerCoordinates = (worker) => {
+    const latitude = worker?.location?.latitude;
+    const longitude = worker?.location?.longitude;
+
+    if (!hasValidCoordinates(latitude, longitude)) {
+        return null;
+    }
+
+    return {
+        latitude: Number(latitude),
+        longitude: Number(longitude)
+    };
 };
 
+
+const getJobCoordinates = (job) => {
+    const latitude =
+        job?.location?.latitude ??
+        job?.latitude;
+
+    const longitude =
+        job?.location?.longitude ??
+        job?.longitude;
+
+    if (!hasValidCoordinates(latitude, longitude)) {
+        return null;
+    }
+
+    return {
+        latitude: Number(latitude),
+        longitude: Number(longitude)
+    };
+};
+
+
+// Haversine distance in KM
 const calculateDistance = (
-    lat1,
-    lon1,
-    lat2,
-    lon2
+    latitude1,
+    longitude1,
+    latitude2,
+    longitude2
 ) => {
-    const R = 6371;
+    const toRadians = (degree) => {
+        return degree * (Math.PI / 180);
+    };
 
-    const dLat =
-        (lat2 - lat1) *
-        Math.PI /
-        180;
+    const earthRadiusKm = 6371;
 
-    const dLon =
-        (lon2 - lon1) *
-        Math.PI /
-        180;
+    const dLat = toRadians(latitude2 - latitude1);
+    const dLng = toRadians(longitude2 - longitude1);
 
     const a =
-        Math.sin(dLat / 2) *
-        Math.sin(dLat / 2) +
-        Math.cos(
-            lat1 * Math.PI / 180
-        ) *
-        Math.cos(
-            lat2 * Math.PI / 180
-        ) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRadians(latitude1)) *
+        Math.cos(toRadians(latitude2)) *
+        Math.sin(dLng / 2) ** 2;
 
     const c =
         2 *
@@ -77,18 +104,61 @@ const calculateDistance = (
             Math.sqrt(1 - a)
         );
 
-    return R * c;
+    return earthRadiusKm * c;
 };
 
+
+const getDistanceBetweenWorkerAndJob = (worker, job) => {
+    const workerLocation = getWorkerCoordinates(worker);
+    const jobLocation = getJobCoordinates(job);
+
+    if (!workerLocation || !jobLocation) {
+        return null;
+    }
+
+    return calculateDistance(
+        workerLocation.latitude,
+        workerLocation.longitude,
+        jobLocation.latitude,
+        jobLocation.longitude
+    );
+};
+
+
+const isSameDistrict = (workerCity, jobCity) => {
+    return normalize(workerCity) === normalize(jobCity);
+};
+
+
+const isWithinServiceRadius = (distance) => {
+    return (
+        Number.isFinite(distance) &&
+        distance <= SERVICE_RADIUS_KM
+    );
+};
+
+
+const getWorkerId = (req) => {
+    return req.user?.id || req.user?._id;
+};
+
+
 // ======================================================
-// GET LOGGED-IN WORKER PROFILE
+// GET WORKER PROFILE
 // ======================================================
 
 const getMyProfile = async (req, res) => {
     try {
-        const worker = await Worker.findById(
-            req.user.id
-        ).select("-password");
+        const workerId = getWorkerId(req);
+
+        if (!workerId) {
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required"
+            });
+        }
+
+        const worker = await Worker.findById(workerId).select("-password");
 
         if (!worker) {
             return res.status(404).json({
@@ -97,24 +167,22 @@ const getMyProfile = async (req, res) => {
             });
         }
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             worker
         });
 
     } catch (error) {
-        console.error(
-            "Get worker profile error:",
-            error
-        );
+        console.error("getMyProfile error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message:
-                "Server error while fetching profile"
+            message: "Failed to fetch worker profile",
+            error: error.message
         });
     }
 };
+
 
 // ======================================================
 // UPDATE WORKER PROFILE
@@ -122,18 +190,16 @@ const getMyProfile = async (req, res) => {
 
 const updateMyProfile = async (req, res) => {
     try {
-        const {
-            name,
-            phone,
-            city,
-            area,
-            skills,
-            experience
-        } = req.body || {};
+        const workerId = getWorkerId(req);
 
-        const worker = await Worker.findById(
-            req.user.id
-        );
+        if (!workerId) {
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required"
+            });
+        }
+
+        const worker = await Worker.findById(workerId);
 
         if (!worker) {
             return res.status(404).json({
@@ -142,362 +208,313 @@ const updateMyProfile = async (req, res) => {
             });
         }
 
-        if (name !== undefined) {
-            const cleanName =
-                String(name).trim();
+        const {
+            name,
+            phone,
+            city,
+            area,
+            skills,
+            experience
+        } = req.body;
 
-            if (cleanName.length < 2) {
+
+        // ----------------------------------------------
+        // BASIC PROFILE FIELDS
+        // ----------------------------------------------
+
+        if (name !== undefined) {
+            const value = String(name).trim();
+
+            if (!value) {
                 return res.status(400).json({
                     success: false,
-                    message:
-                        "Name must contain at least 2 characters"
+                    message: "Name cannot be empty"
                 });
             }
 
-            worker.name = cleanName;
+            worker.name = value;
         }
+
 
         if (phone !== undefined) {
-            const cleanPhone =
-                String(phone).trim();
+            const value = String(phone).trim();
 
-            if (
-                cleanPhone &&
-                !/^[6-9]\d{9}$/.test(cleanPhone)
-            ) {
+            if (!value) {
                 return res.status(400).json({
                     success: false,
-                    message:
-                        "Please enter a valid 10-digit Indian mobile number"
+                    message: "Phone cannot be empty"
                 });
             }
 
-            worker.phone = cleanPhone;
+            worker.phone = value;
         }
 
-        if (city !== undefined) {
-            const cleanCity =
-                String(city).trim();
 
-            if (!cleanCity) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "City cannot be empty"
-                });
-            }
-
-            worker.city = cleanCity;
-        }
+        // ----------------------------------------------
+        // AREA CAN ALWAYS BE CHANGED
+        // ----------------------------------------------
 
         if (area !== undefined) {
-            worker.area =
-                String(area).trim();
-        }
+            const value = String(area).trim();
 
-        if (skills !== undefined) {
-            if (!Array.isArray(skills)) {
+            if (!value) {
                 return res.status(400).json({
                     success: false,
-                    message:
-                        "Skills must be an array"
+                    message: "Area cannot be empty"
                 });
             }
 
-            const cleanedSkills =
-                skills
-                    .map(skill =>
-                        String(skill).trim()
-                    )
+            worker.area = value;
+        }
+
+
+        // ----------------------------------------------
+        // SKILLS
+        // ----------------------------------------------
+
+        if (skills !== undefined) {
+            let normalizedSkills = [];
+
+            if (Array.isArray(skills)) {
+                normalizedSkills = skills
+                    .map((skill) => String(skill).trim())
                     .filter(Boolean);
+            } else if (typeof skills === "string") {
+                normalizedSkills = skills
+                    .split(",")
+                    .map((skill) => skill.trim())
+                    .filter(Boolean);
+            }
 
             worker.skills = [
-                ...new Set(cleanedSkills)
+                ...new Set(normalizedSkills)
             ];
         }
 
+
+        // ----------------------------------------------
+        // EXPERIENCE
+        // ----------------------------------------------
+
         if (experience !== undefined) {
-            const numericExperience =
-                Number(experience);
+            const numericExperience = Number(experience);
 
             if (
-                !Number.isFinite(
-                    numericExperience
-                ) ||
+                !Number.isFinite(numericExperience) ||
                 numericExperience < 0
             ) {
                 return res.status(400).json({
                     success: false,
-                    message:
-                        "Experience must be a valid non-negative number"
+                    message: "Experience must be a valid non-negative number"
                 });
             }
 
-            worker.experience =
-                numericExperience;
+            worker.experience = numericExperience;
         }
+
+
+        // ----------------------------------------------
+        // DISTRICT / CITY
+        //
+        // District can be changed only ONCE.
+        // GPS does NOT change district.
+        // ----------------------------------------------
+
+        if (city !== undefined) {
+            const newCity = String(city).trim();
+
+            if (!newCity) {
+                return res.status(400).json({
+                    success: false,
+                    message: "District cannot be empty"
+                });
+            }
+
+            const oldCity = String(worker.city || "").trim();
+
+            const districtChanged =
+                normalize(newCity) !== normalize(oldCity);
+
+
+            if (districtChanged) {
+
+                if (worker.districtChangeUsed) {
+                    return res.status(400).json({
+                        success: false,
+                        message:
+                            "District can only be changed once"
+                    });
+                }
+
+                worker.city = newCity;
+                worker.districtChangeUsed = true;
+
+            } else {
+                worker.city = newCity;
+            }
+        }
+
 
         await worker.save();
 
         const updatedWorker =
-            await Worker.findById(
-                worker._id
-            ).select("-password");
+            await Worker.findById(worker._id).select("-password");
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-            message:
-                "Worker profile updated successfully",
+            message: "Worker profile updated successfully",
             worker: updatedWorker
         });
 
     } catch (error) {
-        console.error(
-            "Update worker profile error:",
-            error
-        );
+        console.error("updateMyProfile error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message:
-                "Server error while updating profile"
+            message: "Failed to update worker profile",
+            error: error.message
         });
     }
 };
 
+
 // ======================================================
-// UPDATE WORKER ONLINE/OFFLINE STATUS
+// UPDATE WORKER AVAILABILITY
 // ======================================================
 
 const updateAvailability = async (req, res) => {
     try {
-        const {
-            isAvailable
-        } = req.body || {};
+        const workerId = getWorkerId(req);
 
-        if (
-            typeof isAvailable !==
-            "boolean"
-        ) {
-            return res.status(400).json({
+        if (!workerId) {
+            return res.status(401).json({
                 success: false,
-                message:
-                    "isAvailable must be true or false"
+                message: "Authentication required"
             });
         }
 
-        const worker =
-            await Worker.findById(
-                req.user.id
-            );
+        const { isAvailable } = req.body;
+
+        if (typeof isAvailable !== "boolean") {
+            return res.status(400).json({
+                success: false,
+                message: "isAvailable must be true or false"
+            });
+        }
+
+        const worker = await Worker.findById(workerId);
 
         if (!worker) {
             return res.status(404).json({
                 success: false,
-                message:
-                    "Worker not found"
+                message: "Worker not found"
             });
         }
 
-        // ==============================================
-        // GOING ONLINE
-        // ==============================================
 
+        // Worker can go online only after GPS is available.
         if (isAvailable) {
-            const activeJob =
-                await Job.findOne({
-                    assignedWorker:
-                        worker._id,
+            const coordinates =
+                getWorkerCoordinates(worker);
 
-                    status: {
-                        $in:
-                            ACTIVE_JOB_STATUSES
-                    }
-                }).select(
-                    "_id title status"
-                );
-
-            if (activeJob) {
-                return res.status(409).json({
-                    success: false,
-                    message:
-                        "You cannot go online while you have an active job. Complete or cancel the current job first.",
-                    activeJob
-                });
-            }
-
-            if (
-                !hasValidCoordinates(
-                    worker.location?.latitude,
-                    worker.location?.longitude
-                )
-            ) {
+            if (!coordinates) {
                 return res.status(400).json({
                     success: false,
                     message:
-                        "Please update your current location before going online"
-                });
-            }
-
-            if (
-                !String(
-                    worker.city || ""
-                ).trim()
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Please update your city before going online"
-                });
-            }
-
-            if (
-                !Array.isArray(worker.skills) ||
-                worker.skills.length === 0
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Please add at least one skill before going online"
+                        "Please update your current GPS location before going online"
                 });
             }
         }
 
-        // ==============================================
-        // UPDATE AVAILABILITY
-        // ==============================================
 
-        const updatedWorker =
-            await Worker.findOneAndUpdate(
-                {
-                    _id: worker._id
-                },
-                {
-                    $set: {
-                        isAvailable
-                    }
-                },
-                {
-                    new: true,
-                    runValidators: true
-                }
-            ).select("-password");
+        worker.isAvailable = isAvailable;
 
-        if (!updatedWorker) {
-            return res.status(404).json({
-                success: false,
-                message:
-                    "Worker not found"
-            });
-        }
+        await worker.save();
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-
-            message:
-                isAvailable
-                    ? "You are now online"
-                    : "You are now offline",
-
-            worker: updatedWorker
+            message: isAvailable
+                ? "Worker is now online"
+                : "Worker is now offline",
+            worker: {
+                id: worker._id,
+                isAvailable: worker.isAvailable,
+                location: worker.location
+            }
         });
 
     } catch (error) {
-        console.error(
-            "Update availability error:",
-            error
-        );
+        console.error("updateAvailability error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message:
-                "Server error while updating availability"
+            message: "Failed to update availability",
+            error: error.message
         });
     }
 };
 
+
 // ======================================================
-// UPDATE WORKER CURRENT LOCATION
+// UPDATE WORKER GPS LOCATION
 // ======================================================
 
 const updateLocation = async (req, res) => {
     try {
-        const {
-            latitude,
-            longitude
-        } = req.body || {};
+        const workerId = getWorkerId(req);
 
-        const lat = Number(latitude);
-        const lng = Number(longitude);
-
-        if (
-            !Number.isFinite(lat) ||
-            !Number.isFinite(lng)
-        ) {
-            return res.status(400).json({
+        if (!workerId) {
+            return res.status(401).json({
                 success: false,
-                message:
-                    "Latitude and longitude must be numbers"
+                message: "Authentication required"
             });
         }
 
-        if (
-            !hasValidCoordinates(
-                lat,
-                lng
-            )
-        ) {
+        const latitude = Number(req.body?.latitude);
+        const longitude = Number(req.body?.longitude);
+
+        if (!hasValidCoordinates(latitude, longitude)) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Invalid latitude or longitude"
+                    "Latitude and longitude must be valid numbers"
             });
         }
 
-        const worker =
-            await Worker.findByIdAndUpdate(
-                req.user.id,
-                {
-                    location: {
-                        latitude: lat,
-                        longitude: lng
-                    }
-                },
-                {
-                    new: true,
-                    runValidators: true
-                }
-            ).select("-password");
+        const worker = await Worker.findById(workerId);
 
         if (!worker) {
             return res.status(404).json({
                 success: false,
-                message:
-                    "Worker not found"
+                message: "Worker not found"
             });
         }
 
-        res.status(200).json({
+        worker.location = {
+            latitude,
+            longitude,
+            updatedAt: new Date()
+        };
+
+        await worker.save();
+
+        return res.status(200).json({
             success: true,
-            message:
-                "Worker location updated successfully",
-            location:
-                worker.location
+            message: "Worker location updated successfully",
+            location: worker.location
         });
 
     } catch (error) {
-        console.error(
-            "Update location error:",
-            error
-        );
+        console.error("updateLocation error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message:
-                "Server error while updating location"
+            message: "Failed to update worker location",
+            error: error.message
         });
     }
 };
+
 
 // ======================================================
 // WORKER DASHBOARD
@@ -505,232 +522,145 @@ const updateLocation = async (req, res) => {
 
 const getWorkerDashboard = async (req, res) => {
     try {
-        const worker =
-            await Worker.findById(
-                req.user.id
-            ).select("-password");
+        const workerId = getWorkerId(req);
+
+        if (!workerId) {
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required"
+            });
+        }
+
+        const worker = await Worker.findById(workerId)
+            .select("-password");
 
         if (!worker) {
             return res.status(404).json({
                 success: false,
-                message:
-                    "Worker not found"
+                message: "Worker not found"
             });
         }
 
-        const [
-            totalJobs,
-            activeJobs,
-            completedJobs,
-            cancelledJobs
-        ] = await Promise.all([
 
-            Job.countDocuments({
-                assignedWorker:
-                    worker._id
-            }),
+        const workerLocation =
+            getWorkerCoordinates(worker);
 
-            Job.countDocuments({
-                assignedWorker:
-                    worker._id,
-
-                status: {
-                    $in:
-                        ACTIVE_JOB_STATUSES
-                }
-            }),
-
-            Job.countDocuments({
-                assignedWorker:
-                    worker._id,
-
-                status:
-                    "completed"
-            }),
-
-            Job.countDocuments({
-                assignedWorker:
-                    worker._id,
-
-                status:
-                    "cancelled"
-            })
-        ]);
-
-        // ==============================================
-        // EFFECTIVE AVAILABILITY
-        // ==============================================
-
-        let effectiveAvailability =
-            Boolean(
-                worker.isAvailable
-            );
-
-        if (activeJobs > 0) {
-            effectiveAvailability = false;
-        }
-
-        // ==============================================
-        // NEARBY AVAILABLE JOBS
-        // ==============================================
 
         let nearbyJobs = [];
 
-        const workerHasLocation =
-            hasValidCoordinates(
-                worker.location?.latitude,
-                worker.location?.longitude
-            );
-
-        const workerHasSkills =
-            Array.isArray(
-                worker.skills
-            ) &&
-            worker.skills.length > 0;
-
         if (
-            effectiveAvailability &&
-            workerHasLocation &&
-            workerHasSkills
+            worker.isAvailable &&
+            workerLocation &&
+            Array.isArray(worker.skills) &&
+            worker.skills.length > 0
         ) {
-            const jobs =
-                await Job.find({
-                    city:
-                        worker.city,
 
-                    requiredSkill: {
-                        $in:
-                            worker.skills
-                    },
-
-                    status: {
-                        $in:
-                            AVAILABLE_JOB_STATUSES
-                    },
-
-                    assignedWorker:
-                        null
+            const jobs = await Job.find({
+                city: worker.city,
+                status: {
+                    $in: AVAILABLE_JOB_STATUSES
+                },
+                assignedWorker: null
+            })
+                .populate(
+                    "customer",
+                    "name phone email city area"
+                )
+                .sort({
+                    createdAt: -1
                 })
-                    .populate(
-                        "customer",
-                        "name phone city area"
-                    )
-                    .sort({
-                        createdAt: -1
-                    });
+                .limit(100);
 
-            nearbyJobs =
-                jobs
-                    .map(job => {
 
-                        if (
-                            !hasValidCoordinates(
-                                job.location?.latitude,
-                                job.location?.longitude
-                            )
-                        ) {
-                            return null;
-                        }
+            nearbyJobs = jobs
+                .filter((job) => {
 
-                        const distance =
-                            calculateDistance(
-                                worker.location.latitude,
-                                worker.location.longitude,
-                                job.location.latitude,
-                                job.location.longitude
-                            );
-
-                        if (
-                            !Number.isFinite(
-                                distance
-                            ) ||
-                            distance >
-                                SERVICE_RADIUS_KM
-                        ) {
-                            return null;
-                        }
-
-                        return {
-                            ...job.toObject(),
-
-                            distance:
-                                Number(
-                                    distance.toFixed(2)
+                    const skillMatch =
+                        worker.skills.some(
+                            (workerSkill) =>
+                                normalize(workerSkill) ===
+                                normalize(
+                                    job.requiredSkill ||
+                                    job.category
                                 )
-                        };
-                    })
-                    .filter(Boolean)
-                    .sort(
-                        (a, b) =>
-                            a.distance -
-                            b.distance
-                    )
-                    .slice(0, 10);
+                        );
+
+                    if (!skillMatch) {
+                        return false;
+                    }
+
+                    const distance =
+                        getDistanceBetweenWorkerAndJob(
+                            worker,
+                            job
+                        );
+
+                    return isWithinServiceRadius(distance);
+                })
+                .map((job) => {
+
+                    const distance =
+                        getDistanceBetweenWorkerAndJob(
+                            worker,
+                            job
+                        );
+
+                    return {
+                        ...job.toObject(),
+                        distance: Number(
+                            distance.toFixed(2)
+                        )
+                    };
+                })
+                .sort(
+                    (a, b) =>
+                        a.distance - b.distance
+                );
         }
 
-        res.status(200).json({
+
+        return res.status(200).json({
             success: true,
 
-            dashboard: {
-                worker: {
-                    id:
-                        worker._id,
+            worker: {
+                id: worker._id,
+                name: worker.name,
+                city: worker.city,
+                area: worker.area,
+                skills: worker.skills,
+                experience: worker.experience,
+                rating: worker.rating,
+                acceptedJobs: worker.acceptedJobs,
+                completedJobs: worker.completedJobs,
+                isAvailable: worker.isAvailable,
+                location: worker.location,
+                districtChangeUsed:
+                    worker.districtChangeUsed
+            },
 
-                    name:
-                        worker.name,
+            stats: {
+                acceptedJobs:
+                    worker.acceptedJobs,
+                completedJobs:
+                    worker.completedJobs,
+                rating:
+                    worker.rating
+            },
 
-                    city:
-                        worker.city,
-
-                    area:
-                        worker.area,
-
-                    skills:
-                        worker.skills,
-
-                    isAvailable:
-                        effectiveAvailability,
-
-                    rating:
-                        worker.rating || 0,
-
-                    location:
-                        worker.location
-                },
-
-                statistics: {
-                    totalJobs,
-                    activeJobs,
-                    completedJobs,
-                    cancelledJobs,
-
-                    acceptedJobs:
-                        worker.acceptedJobs || 0,
-
-                    completedJobsCount:
-                        worker.completedJobs || 0,
-
-                    rating:
-                        worker.rating || 0
-                },
-
-                nearbyJobs
-            }
+            nearbyJobs
         });
 
     } catch (error) {
-        console.error(
-            "Worker dashboard error:",
-            error
-        );
+        console.error("getWorkerDashboard error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message:
-                "Server error while loading worker dashboard"
+            message: "Failed to load worker dashboard",
+            error: error.message
         });
     }
 };
+
 
 // ======================================================
 // WORKER EARNINGS
@@ -738,450 +668,311 @@ const getWorkerDashboard = async (req, res) => {
 
 const getWorkerEarnings = async (req, res) => {
     try {
-        const jobs =
-            await Job.find({
-                assignedWorker:
-                    req.user.id,
+        const workerId = getWorkerId(req);
 
-                status:
-                    "completed",
+        if (!workerId) {
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required"
+            });
+        }
 
-                paymentStatus:
-                    "paid"
-            })
-                .select(
-                    "title category finalPrice paymentStatus transactionId paidAt updatedAt"
-                )
-                .sort({
-                    updatedAt: -1
-                });
+        const jobs = await Job.find({
+            assignedWorker: workerId,
+            status: "completed",
+            paymentStatus: "paid"
+        })
+            .select(
+                "title category finalPrice paymentStatus transactionId paidAt updatedAt"
+            )
+            .sort({
+                updatedAt: -1
+            });
 
-        const totalEarnings =
-            jobs.reduce(
-                (
-                    total,
-                    job
-                ) =>
-                    total +
-                    (
-                        Number(
-                            job.finalPrice
-                        ) || 0
-                    ),
-                0
-            );
 
-        res.status(200).json({
+        const totalEarnings = jobs.reduce(
+            (total, job) =>
+                total + Number(job.finalPrice || 0),
+            0
+        );
+
+
+        return res.status(200).json({
             success: true,
-
-            earnings: {
-                total:
-                    Number(
-                        totalEarnings.toFixed(2)
-                    ),
-
-                completedJobs:
-                    jobs.length,
-
-                jobs
-            }
+            totalEarnings,
+            count: jobs.length,
+            jobs
         });
 
     } catch (error) {
-        console.error(
-            "Worker earnings error:",
-            error
-        );
+        console.error("getWorkerEarnings error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message:
-                "Server error while loading earnings"
+            message: "Failed to load worker earnings",
+            error: error.message
         });
     }
 };
 
+
 // ======================================================
-// SEARCH + FILTER AVAILABLE JOBS
+// WORKER JOB SEARCH + FILTERS
 // ======================================================
 
 const searchWorkerJobs = async (req, res) => {
     try {
-        const worker =
-            await Worker.findById(
-                req.user.id
-            );
+        const workerId = getWorkerId(req);
+
+        if (!workerId) {
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required"
+            });
+        }
+
+        const worker = await Worker.findById(workerId)
+            .select("-password");
 
         if (!worker) {
             return res.status(404).json({
                 success: false,
-                message:
-                    "Worker not found"
+                message: "Worker not found"
             });
         }
 
-        // ==============================================
-        // ACTIVE JOB PROTECTION
-        // ==============================================
 
-        const activeJob =
-            await Job.findOne({
-                assignedWorker:
-                    worker._id,
-
-                status: {
-                    $in:
-                        ACTIVE_JOB_STATUSES
-                }
-            }).select(
-                "_id title status"
-            );
-
-        if (activeJob) {
-            return res.status(200).json({
-                success: true,
-
-                count: 0,
-
+        // Worker must be online.
+        if (!worker.isAvailable) {
+            return res.status(400).json({
+                success: false,
                 message:
-                    "You already have an active job",
-
-                activeJob,
-
+                    "Worker must be online to search nearby jobs",
                 jobs: []
             });
         }
 
-        // ==============================================
-        // LOCATION CHECK
-        // ==============================================
 
-        if (
-            !hasValidCoordinates(
-                worker.location?.latitude,
-                worker.location?.longitude
-            )
-        ) {
+        const workerLocation =
+            getWorkerCoordinates(worker);
+
+        if (!workerLocation) {
             return res.status(400).json({
                 success: false,
                 message:
-                    "Please update your current location first"
+                    "Please update your GPS location first",
+                jobs: []
             });
         }
 
+
+        // --------------------------------------------------
+        // QUERY FILTERS
+        // --------------------------------------------------
+
         const {
-            category,
             skill,
+            category,
             urgency,
             minPrice,
             maxPrice,
-            status,
-            limit = 20
-        } = req.query || {};
+            status = "posted",
+            limit = 50
+        } = req.query;
 
-        // ==============================================
-        // LIMIT
-        // ==============================================
-
-        const parsedLimit =
-            Number(limit);
-
-        const safeLimit =
-            Number.isFinite(
-                parsedLimit
-            )
-                ? Math.min(
-                    Math.max(
-                        Math.floor(
-                            parsedLimit
-                        ),
-                        1
-                    ),
-                    50
-                )
-                : 20;
-
-        // ==============================================
-        // BASE QUERY
-        // ==============================================
 
         const query = {
-            city:
-                worker.city,
-
-            assignedWorker:
-                null
+            city: worker.city,
+            status: {
+                $in: AVAILABLE_JOB_STATUSES
+            },
+            assignedWorker: null
         };
 
-        // ==============================================
-        // STATUS
-        // ==============================================
 
-        if (status) {
-            if (
-                !AVAILABLE_JOB_STATUSES.includes(
-                    String(status)
-                )
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Invalid job status"
-                });
-            }
-
-            query.status =
-                String(status);
-
-        } else {
-            query.status = {
-                $in:
-                    AVAILABLE_JOB_STATUSES
-            };
+        // Status filter
+        if (
+            status &&
+            AVAILABLE_JOB_STATUSES.includes(
+                String(status).toLowerCase()
+            )
+        ) {
+            query.status = String(status).toLowerCase();
         }
 
-        // ==============================================
-        // CATEGORY
-        // ==============================================
 
+        // Skill filter
+        if (skill) {
+            query.$or = [
+                {
+                    requiredSkill: {
+                        $regex: String(skill),
+                        $options: "i"
+                    }
+                },
+                {
+                    category: {
+                        $regex: String(skill),
+                        $options: "i"
+                    }
+                }
+            ];
+        }
+
+
+        // Category filter
         if (category) {
             query.category = {
-                $regex:
-                    String(category).trim(),
+                $regex: String(category),
                 $options: "i"
             };
         }
 
-        // ==============================================
-        // SKILL
-        // ==============================================
 
-        if (skill) {
-            query.requiredSkill = {
-                $regex:
-                    String(skill).trim(),
-                $options: "i"
-            };
-        }
-
-        // ==============================================
-        // URGENCY
-        // ==============================================
-
+        // Urgency filter
         if (urgency) {
-            const allowedUrgencies = [
-                "normal",
-                "urgent"
-            ];
+            query.urgency = {
+                $regex: String(urgency),
+                $options: "i"
+            };
+        }
 
-            if (
-                !allowedUrgencies.includes(
-                    normalizeString(
-                        urgency
+
+        // Price filter
+        const minimumPrice = Number(minPrice);
+        const maximumPrice = Number(maxPrice);
+
+        if (
+            Number.isFinite(minimumPrice) ||
+            Number.isFinite(maximumPrice)
+        ) {
+
+            query.$and = [];
+
+            if (Number.isFinite(minimumPrice)) {
+                query.$and.push({
+                    $or: [
+                        {
+                            estimatedMinPrice: {
+                                $gte: minimumPrice
+                            }
+                        },
+                        {
+                            "estimatedPrice.min": {
+                                $gte: minimumPrice
+                            }
+                        }
+                    ]
+                });
+            }
+
+            if (Number.isFinite(maximumPrice)) {
+                query.$and.push({
+                    $or: [
+                        {
+                            estimatedMaxPrice: {
+                                $lte: maximumPrice
+                            }
+                        },
+                        {
+                            "estimatedPrice.max": {
+                                $lte: maximumPrice
+                            }
+                        }
+                    ]
+                });
+            }
+        }
+
+
+        const parsedLimit = Math.min(
+            Math.max(Number(limit) || 50, 1),
+            100
+        );
+
+
+        const jobs = await Job.find(query)
+            .populate(
+                "customer",
+                "name phone email city area"
+            )
+            .sort({
+                createdAt: -1
+            })
+            .limit(parsedLimit);
+
+
+        // --------------------------------------------------
+        // ACTUAL GPS DISTANCE + WORKER SKILL MATCH
+        // --------------------------------------------------
+
+        const filteredJobs = jobs
+            .filter((job) => {
+
+                const jobSkill =
+                    job.requiredSkill ||
+                    job.category;
+
+                const workerHasSkill =
+                    Array.isArray(worker.skills) &&
+                    worker.skills.some(
+                        (workerSkill) =>
+                            normalize(workerSkill) ===
+                            normalize(jobSkill)
+                    );
+
+                if (!workerHasSkill) {
+                    return false;
+                }
+
+
+                const distance =
+                    getDistanceBetweenWorkerAndJob(
+                        worker,
+                        job
+                    );
+
+                return isWithinServiceRadius(distance);
+            })
+            .map((job) => {
+
+                const distance =
+                    getDistanceBetweenWorkerAndJob(
+                        worker,
+                        job
+                    );
+
+                return {
+                    ...job.toObject(),
+                    distance: Number(
+                        distance.toFixed(2)
                     )
-                )
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Invalid urgency"
-                });
-            }
+                };
+            })
+            .sort(
+                (a, b) =>
+                    a.distance - b.distance
+            );
 
-            query.urgency =
-                normalizeString(
-                    urgency
-                );
-        }
 
-        // ==============================================
-        // PRICE FILTERS
-        // ==============================================
-
-        if (
-            minPrice !==
-            undefined
-        ) {
-            const min =
-                Number(minPrice);
-
-            if (
-                !Number.isFinite(min) ||
-                min < 0
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Invalid minimum price"
-                });
-            }
-
-            query.estimatedMaxPrice = {
-                $gte: min
-            };
-        }
-
-        if (
-            maxPrice !==
-            undefined
-        ) {
-            const max =
-                Number(maxPrice);
-
-            if (
-                !Number.isFinite(max) ||
-                max < 0
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Invalid maximum price"
-                });
-            }
-
-            query.estimatedMinPrice = {
-                $lte: max
-            };
-        }
-
-        if (
-            minPrice !== undefined &&
-            maxPrice !== undefined
-        ) {
-            const min =
-                Number(minPrice);
-
-            const max =
-                Number(maxPrice);
-
-            if (min > max) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Minimum price cannot be greater than maximum price"
-                });
-            }
-        }
-
-        // ==============================================
-        // FETCH JOBS
-        // ==============================================
-
-        const jobs =
-            await Job.find(query)
-                .populate(
-                    "customer",
-                    "name phone city area"
-                )
-                .sort({
-                    createdAt: -1
-                });
-
-        // ==============================================
-        // DISTANCE FILTER
-        // ==============================================
-
-        const filteredJobs =
-            jobs
-                .map(job => {
-
-                    if (
-                        !hasValidCoordinates(
-                            job.location?.latitude,
-                            job.location?.longitude
-                        )
-                    ) {
-                        return null;
-                    }
-
-                    const distance =
-                        calculateDistance(
-                            worker.location.latitude,
-                            worker.location.longitude,
-                            job.location.latitude,
-                            job.location.longitude
-                        );
-
-                    if (
-                        !Number.isFinite(
-                            distance
-                        ) ||
-                        distance >
-                            SERVICE_RADIUS_KM
-                    ) {
-                        return null;
-                    }
-
-                    return {
-                        ...job.toObject(),
-
-                        distance:
-                            Number(
-                                distance.toFixed(2)
-                            )
-                    };
-                })
-                .filter(Boolean)
-                .sort(
-                    (a, b) =>
-                        a.distance -
-                        b.distance
-                )
-                .slice(
-                    0,
-                    safeLimit
-                );
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-
-            count:
-                filteredJobs.length,
-
-            radius:
-                SERVICE_RADIUS_KM,
-
-            filters: {
-                category:
-                    category || null,
-
-                skill:
-                    skill || null,
-
-                urgency:
-                    urgency || null,
-
-                status:
-                    status || null,
-
-                minPrice:
-                    minPrice !== undefined
-                        ? Number(minPrice)
-                        : null,
-
-                maxPrice:
-                    maxPrice !== undefined
-                        ? Number(maxPrice)
-                        : null
-            },
-
-            jobs:
-                filteredJobs
+            count: filteredJobs.length,
+            radiusKm: SERVICE_RADIUS_KM,
+            jobs: filteredJobs
         });
 
     } catch (error) {
-        console.error(
-            "Search worker jobs error:",
-            error
-        );
+        console.error("searchWorkerJobs error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message:
-                "Server error while searching jobs"
+            message: "Failed to search worker jobs",
+            error: error.message
         });
     }
 };
+
 
 // ======================================================
 // EXPORTS

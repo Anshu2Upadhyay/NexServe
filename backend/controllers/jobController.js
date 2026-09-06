@@ -463,6 +463,50 @@ const getMyJobs = async (req, res) => {
 };
 
 // ======================================================
+// GET WORKER MY JOBS
+// ======================================================
+
+const getMyWorkerJobs = async (req, res) => {
+    try {
+        const jobs =
+            await Job.find({
+                assignedWorker:
+                    req.user.id
+            })
+                .populate(
+                    "customer",
+                    "name phone city area"
+                )
+                .populate(
+                    "assignedWorker",
+                    "name phone skills rating completedJobs isAvailable"
+                )
+                .sort({
+                    updatedAt: -1
+                });
+
+        return res.status(200).json({
+            success: true,
+            count:
+                jobs.length,
+            jobs
+        });
+
+    } catch (error) {
+        console.error(
+            "Get worker my jobs error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Server error while fetching worker jobs"
+        });
+    }
+};
+
+// ======================================================
 // GET SINGLE JOB
 // ======================================================
 
@@ -908,7 +952,6 @@ const acceptJob = async (
 
         // ==================================================
         // ATOMIC JOB ASSIGNMENT
-        // Prevents two workers accepting same job
         // ==================================================
 
         const updatedJob =
@@ -1868,8 +1911,6 @@ const rateWorker = async (
             });
         }
 
-        // completedJobs includes this completed job.
-        // Previous completed count is therefore -1.
         const previousCompletedJobs =
             Math.max(
                 Number(
@@ -2095,7 +2136,6 @@ const cancelJob = async (
         job.cancelledAt =
             new Date();
 
-        // OTP must never remain usable.
         job.otp =
             null;
 
@@ -2227,6 +2267,7 @@ const cancelJob = async (
 module.exports = {
     createJob,
     getMyJobs,
+    getMyWorkerJobs,
     getJobDetails,
     getAvailableJobs,
     acceptJob,

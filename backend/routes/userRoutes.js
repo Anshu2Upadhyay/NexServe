@@ -1,10 +1,22 @@
 const express = require("express");
 
-const { getMyProfile } = require("../controllers/userController");
+const {
+    getMyProfile,
+    updateMyProfile,
+    updateLocation
+} = require("../controllers/userController");
 
-const { protect, authorize } = require("../middleware/authMiddleware");
+const {
+    protect,
+    authorize
+} = require("../middleware/authMiddleware");
 
 const router = express.Router();
+
+
+// ======================================================
+// CUSTOMER PROFILE
+// ======================================================
 
 router.get(
     "/profile",
@@ -12,5 +24,26 @@ router.get(
     authorize("customer"),
     getMyProfile
 );
+
+
+router.patch(
+    "/profile",
+    protect,
+    authorize("customer"),
+    updateMyProfile
+);
+
+
+// ======================================================
+// CUSTOMER GPS LOCATION
+// ======================================================
+
+router.patch(
+    "/location",
+    protect,
+    authorize("customer"),
+    updateLocation
+);
+
 
 module.exports = router;
