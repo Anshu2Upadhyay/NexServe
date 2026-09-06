@@ -125,9 +125,9 @@ function LoginPage() {
             return;
         }
 
-        if (password.length < 4) {
+        if (password.length < 6) {
             setError(
-                "Password must contain at least 4 characters."
+                "Password must contain at least 6 characters."
             );
             return;
         }
