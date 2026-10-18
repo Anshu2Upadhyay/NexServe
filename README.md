@@ -27,35 +27,14 @@ From natural language service request interpretation to real-time technician mat
 
 ## 🏗️ System Architecture
 
-NexServe is organized into three decoupled layers communicating via authenticated REST APIs:
+<p align="center">
+  <img src="docs/assets/system-architecture.png" alt="NexServe System Architecture" width="100%">
+</p>
 
-```mermaid
-graph TD
-    subgraph ClientLayer ["Client Presentation Layer (React 19 + Vite)"]
-        CustomerUI["Customer Portal (Booking & Tracking)"]
-        WorkerUI["Worker Portal (Discovery & Earnings)"]
-        AdminUI["Admin Portal (Governance & Verification)"]
-    end
-
-    subgraph APILayer ["Backend Orchestration Service (Express 5 + Node.js)"]
-        AuthMiddleware["JWT Authentication & RBAC"]
-        JobController["Job Lifecycle & Dispatch Engine"]
-        WorkerController["Worker Management & Geo-Lookups"]
-        SeedManager["Auto-Seed & Bootstrapping"]
-    end
-
-    subgraph DataLayer ["Persistence & Intelligence"]
-        MongoDB[("MongoDB Database")]
-        FlaskAI["Python AI Microservice (Flask + Scikit-Learn)"]
-    end
-
-    CustomerUI -->|REST / JSON| APILayer
-    WorkerUI -->|REST / JSON| APILayer
-    AdminUI -->|REST / JSON| APILayer
-
-    APILayer -->|Queries & Transactions| MongoDB
-    JobController -->|POST /predict| FlaskAI
-```
+NexServe is organized into three decoupled, high-performance layers communicating via authenticated REST APIs:
+- **Presentation Tier**: Multi-role client portals for Customers, Workers/Technicians, and Administrators built with React 19 & Vite.
+- **Microservice Application Tier**: Centralized Node.js & Express 5 API Gateway handling JWT authentication, smart workforce dispatching, and geospatial routing.
+- **Data & AI Intelligence Tier**: Persistent MongoDB database cluster coupled with a dedicated Python Flask & Scikit-Learn NLP classification microservice.
 
 ---
 
